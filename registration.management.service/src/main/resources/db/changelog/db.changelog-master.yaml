@@ -1,0 +1,4 @@
+databaseChangeLog:
+  - include:
+      file: /schema/V001_create_enums.sql
+      relativeToChangelogFile: true
