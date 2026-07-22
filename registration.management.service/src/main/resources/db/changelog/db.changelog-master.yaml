@@ -2,3 +2,56 @@ databaseChangeLog:
   - include:
       file: /schema/V001_create_enums.sql
       relativeToChangelogFile: true
+
+  - include:
+      file: /schema/V002_create_roles_table.sql
+      relativeToChangelogFile: true
+
+  - include:
+      file: /schema/V003_create_permissions_table.sql
+      relativeToChangelogFile: true
+
+  - include:
+      file: /schema/V004_create_role_permissions_table.sql
+      relativeToChangelogFile: true
+
+  - include:
+      file: /schema/V005_create_users_table.sql
+      relativeToChangelogFile: true
+
+  - include:
+      file: /schema/V006_create_refresh_tokens_table.sql
+      relativeToChangelogFile: true
+
+  - include:
+      file: /schema/V007_create_participation_categories_table.sql
+      relativeToChangelogFile: true
+
+  - include:
+      file: /schema/V008_create_schools_table.sql
+      relativeToChangelogFile: true
+
+  - include:
+      file: /schema/V009_create_school_staff_table.sql
+      relativeToChangelogFile: true
+
+  - include:
+      file: /schema/V010_create_events_table.sql
+      relativeToChangelogFile: true
+
+  - include:
+      file: /schema/V011_create_registrations_table.sql
+      relativeToChangelogFile: true
+
+  - include:
+      file: /schema/V012_create_participants_table.sql
+      relativeToChangelogFile: true
+
+  - include:
+      file: /schema/V013_create_checkins_table.sql
+      relativeToChangelogFile: true
+
+  - include:
+      file: /schema/V014_create_audit_logs_table.sql
+      relativeToChangelogFile: true
+
