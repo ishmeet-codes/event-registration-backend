@@ -103,7 +103,7 @@ CREATE INDEX idx_participants_name
     ON participants(full_name);
 
 CREATE INDEX idx_participants_guardian_phone
-    ON participants(gaurdian_phone);
+    ON participants(guardian_phone);
 
 CREATE INDEX idx_participants_created_by
     ON participants(created_by);
