@@ -55,3 +55,23 @@ databaseChangeLog:
       file: /schema/V014_create_audit_logs_table.sql
       relativeToChangelogFile: true
 
+  - include:
+      file: /schema/V015_create_indexes.sql
+      relativeToChangelogFile: true
+
+  - include:
+      file: /schema/V016_seed_roles.sql
+      relativeToChangelogFile: true
+
+  - include:
+      file: /schema/V017_seed_permissions.sql
+      relativeToChangelogFile: true
+
+  - include:
+      file: /schema/V018_seed_role_permissions.sql
+      relativeToChangelogFile: true
+
+  - include:
+      file: /schema/V019_seed_participation_categories.sql
+      relativeToChangelogFile: true
+
