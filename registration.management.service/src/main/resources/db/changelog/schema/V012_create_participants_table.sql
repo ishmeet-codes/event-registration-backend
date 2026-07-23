@@ -12,7 +12,7 @@ CREATE TABLE participants (
     gender gender NOT NULL,
     class_name VARCHAR(20),
     dob DATE NOT NULL,
-    gaurdian_phone VARCHAR(20) NOT NULL,
+    guardian_phone VARCHAR(20) NOT NULL,
     created_by BIGINT NOT NULL,
     updated_by BIGINT NOT NULL,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
