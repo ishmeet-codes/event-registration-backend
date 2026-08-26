@@ -14,6 +14,7 @@ import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.userdetails.UserDetails;
 
 import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.Collection;
 import java.util.HashSet;
 import java.util.List;
@@ -117,7 +118,23 @@ public class User implements UserDetails {
 
     @Override
     public Collection<? extends GrantedAuthority> getAuthorities() {
-        return List.of();
+        List<GrantedAuthority> authorities = new ArrayList<>();
+
+        // Add the role itself as ROLE_<CODE> (used with hasRole() / hasAnyRole())
+        if (role != null) {
+            authorities.add(new SimpleGrantedAuthority("ROLE_" + role.getRoleCode()));
+
+            // Add each permission code the role carries (used with hasAuthority())
+            if (role.getRolePermissions() != null) {
+                for (RolePermission rp : role.getRolePermissions()) {
+                    if (rp.getPermission() != null) {
+                        authorities.add(new SimpleGrantedAuthority(rp.getPermission().getPermissionCode()));
+                    }
+                }
+            }
+        }
+
+        return authorities;
     }
 
     @Override

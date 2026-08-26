@@ -75,3 +75,11 @@ databaseChangeLog:
       file: /schema/V019_seed_participation_categories.sql
       relativeToChangelogFile: true
 
+  - include:
+      file: /schema/V020_seed_new_roles_and_permissions.sql
+      relativeToChangelogFile: true
+
+  - include:
+      file: /schema/V021_fix_super_admin_permissions.sql
+      relativeToChangelogFile: true
+

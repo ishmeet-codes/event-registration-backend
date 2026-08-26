@@ -16,6 +16,7 @@ public class AdminUserInitializer {
     public CommandLineRunner init(UserRepository userRepository, RoleRepository roleRepository, PasswordEncoder passwordEncoder) {
         return args -> {
             String adminEmail = "admin@registration.com";
+            String userEmail = "user@registration.com";
             if (userRepository.findByEmail(adminEmail).isEmpty()) {
                 Role superAdminRole = roleRepository.findByRoleCode("SUPER_ADMIN")
                         .orElseThrow(() -> new IllegalStateException("SUPER_ADMIN role not found in database"));
@@ -30,6 +31,21 @@ public class AdminUserInitializer {
 
                 userRepository.save(admin);
                 System.out.println("Initialized admin user: " + admin);
+            }
+            if (userRepository.findByEmail(userEmail).isEmpty()) {
+                Role REGISTRATION_TEAM = roleRepository.findByRoleCode("REGISTRATION_TEAM")
+                        .orElseThrow(() -> new IllegalStateException("REGISTRATION_TEAM role not found in database"));
+
+                User user = User.builder()
+                        .fullName("User")
+                        .email(userEmail)
+                        .password(passwordEncoder.encode("user123"))
+                        .role(REGISTRATION_TEAM)
+                        .active(true)
+                        .build();
+
+                userRepository.save(user);
+                System.out.println("Initialized admin user: " + user);
             }
         };
     }
