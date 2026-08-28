@@ -19,8 +19,6 @@ public class PermissionServiceImpl implements PermissionService {
     @Autowired
     private PermissionRepository permissionRepository;
 
-    // ─── Create ────────────────────────────────────────────────────────────────
-
     @Override
     public PermissionResponse createPermission(PermissionRequest request) {
         if (permissionRepository.existsByPermissionCode(request.getPermissionCode())) {
@@ -36,8 +34,6 @@ public class PermissionServiceImpl implements PermissionService {
         return toResponse(permissionRepository.save(permission));
     }
 
-    // ─── Read ───────────────────────────────────────────────────────────────────
-
     @Override
     @Transactional(readOnly = true)
     public List<PermissionResponse> getAllPermissions() {
@@ -52,8 +48,6 @@ public class PermissionServiceImpl implements PermissionService {
         return toResponse(findOrThrow(id));
     }
 
-    // ─── Update ─────────────────────────────────────────────────────────────────
-
     @Override
     public PermissionResponse updatePermission(Long id, PermissionRequest request) {
         Permission permission = findOrThrow(id);
@@ -62,14 +56,10 @@ public class PermissionServiceImpl implements PermissionService {
         return toResponse(permissionRepository.save(permission));
     }
 
-    // ─── Delete ─────────────────────────────────────────────────────────────────
-
     @Override
     public void deletePermission(Long id) {
         permissionRepository.delete(findOrThrow(id));
     }
-
-    // ─── Helpers ────────────────────────────────────────────────────────────────
 
     private Permission findOrThrow(Long id) {
         return permissionRepository.findById(id)

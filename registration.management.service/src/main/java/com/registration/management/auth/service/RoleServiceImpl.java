@@ -21,13 +21,8 @@ import java.util.stream.Collectors;
 @Transactional
 public class RoleServiceImpl implements RoleService {
 
-    @Autowired
-    private RoleRepository roleRepository;
-
-    @Autowired
-    private PermissionRepository permissionRepository;
-
-    // ─── Create ────────────────────────────────────────────────────────────────
+    @Autowired private RoleRepository roleRepository;
+    @Autowired private PermissionRepository permissionRepository;
 
     @Override
     public RoleResponse createRole(RoleRequest request) {
@@ -46,8 +41,6 @@ public class RoleServiceImpl implements RoleService {
         return toResponse(roleRepository.save(role));
     }
 
-    // ─── Read ───────────────────────────────────────────────────────────────────
-
     @Override
     @Transactional(readOnly = true)
     public List<RoleResponse> getAllRoles() {
@@ -62,8 +55,6 @@ public class RoleServiceImpl implements RoleService {
         return toResponse(findRoleOrThrow(id));
     }
 
-    // ─── Update ─────────────────────────────────────────────────────────────────
-
     @Override
     public RoleResponse updateRole(Long id, RoleRequest request) {
         Role role = findRoleOrThrow(id);
@@ -75,7 +66,12 @@ public class RoleServiceImpl implements RoleService {
         return toResponse(roleRepository.save(role));
     }
 
-    // ─── Delete ─────────────────────────────────────────────────────────────────
+    @Override
+    public RoleResponse setRoleStatus(Long id, boolean active) {
+        Role role = findRoleOrThrow(id);
+        role.setActive(active);
+        return toResponse(roleRepository.save(role));
+    }
 
     @Override
     public void deleteRole(Long id) {
@@ -86,45 +82,78 @@ public class RoleServiceImpl implements RoleService {
         roleRepository.delete(role);
     }
 
-    // ─── Assign Permissions ─────────────────────────────────────────────────────
+    @Override
+    @Transactional(readOnly = true)
+    public List<PermissionResponse> getRolePermissions(Long roleId) {
+        Role role = findRoleOrThrow(roleId);
+        return role.getRolePermissions().stream()
+                .map(rp -> toPermissionResponse(rp.getPermission()))
+                .collect(Collectors.toList());
+    }
 
     @Override
     public RoleResponse assignPermissions(Long roleId, AssignPermissionsRequest request) {
         Role role = findRoleOrThrow(roleId);
-
-        // Remove existing permissions not in the new list (full replace)
+        // Full replace
         role.getRolePermissions().clear();
 
         for (Long permId : request.getPermissionIds()) {
             Permission permission = permissionRepository.findById(permId)
                     .orElseThrow(() -> new EntityNotFoundException("Permission not found: " + permId));
-
-            RolePermission rp = RolePermission.builder()
+            role.getRolePermissions().add(RolePermission.builder()
                     .role(role)
                     .permission(permission)
-                    .build();
-            role.getRolePermissions().add(rp);
+                    .build());
         }
 
         return toResponse(roleRepository.save(role));
     }
 
-    // ─── Helpers ────────────────────────────────────────────────────────────────
+    @Override
+    public RoleResponse addPermission(Long roleId, Long permissionId) {
+        Role role = findRoleOrThrow(roleId);
+        Permission permission = permissionRepository.findById(permissionId)
+                .orElseThrow(() -> new EntityNotFoundException("Permission not found: " + permissionId));
+
+        boolean alreadyAssigned = role.getRolePermissions().stream()
+                .anyMatch(rp -> rp.getPermission().getId().equals(permissionId));
+
+        if (!alreadyAssigned) {
+            role.getRolePermissions().add(RolePermission.builder()
+                    .role(role)
+                    .permission(permission)
+                    .build());
+            roleRepository.save(role);
+        }
+
+        return toResponse(role);
+    }
+
+    @Override
+    public RoleResponse removePermission(Long roleId, Long permissionId) {
+        Role role = findRoleOrThrow(roleId);
+        role.getRolePermissions().removeIf(rp -> rp.getPermission().getId().equals(permissionId));
+        return toResponse(roleRepository.save(role));
+    }
 
     private Role findRoleOrThrow(Long id) {
         return roleRepository.findById(id)
                 .orElseThrow(() -> new EntityNotFoundException("Role not found: " + id));
     }
 
+    private PermissionResponse toPermissionResponse(Permission p) {
+        return PermissionResponse.builder()
+                .id(p.getId())
+                .permissionCode(p.getPermissionCode())
+                .permissionName(p.getPermissionName())
+                .description(p.getDescription())
+                .createdAt(p.getCreatedAt())
+                .build();
+    }
+
     private RoleResponse toResponse(Role role) {
         List<PermissionResponse> permissions = role.getRolePermissions().stream()
-                .map(rp -> PermissionResponse.builder()
-                        .id(rp.getPermission().getId())
-                        .permissionCode(rp.getPermission().getPermissionCode())
-                        .permissionName(rp.getPermission().getPermissionName())
-                        .description(rp.getPermission().getDescription())
-                        .createdAt(rp.getPermission().getCreatedAt())
-                        .build())
+                .map(rp -> toPermissionResponse(rp.getPermission()))
                 .collect(Collectors.toList());
 
         return RoleResponse.builder()

@@ -13,32 +13,32 @@ import org.springframework.web.bind.annotation.*;
 import java.util.List;
 
 @RestController
-@RequestMapping("/api/permissions")
+@RequestMapping("/api/auth/permissions")
 public class PermissionController {
 
     @Autowired
     private PermissionService permissionService;
 
     @PostMapping
-    @PreAuthorize("hasAuthority('WRITE')")
+    @PreAuthorize("hasAuthority('PERMISSION_CREATE')")
     public ResponseEntity<PermissionResponse> createPermission(@Valid @RequestBody PermissionRequest request) {
         return ResponseEntity.status(HttpStatus.CREATED).body(permissionService.createPermission(request));
     }
 
     @GetMapping
-    @PreAuthorize("hasAuthority('READ')")
+    @PreAuthorize("hasAuthority('PERMISSION_VIEW')")
     public ResponseEntity<List<PermissionResponse>> getAllPermissions() {
         return ResponseEntity.ok(permissionService.getAllPermissions());
     }
 
     @GetMapping("/{id}")
-    @PreAuthorize("hasAuthority('READ')")
+    @PreAuthorize("hasAuthority('PERMISSION_VIEW')")
     public ResponseEntity<PermissionResponse> getPermissionById(@PathVariable Long id) {
         return ResponseEntity.ok(permissionService.getPermissionById(id));
     }
 
     @PutMapping("/{id}")
-    @PreAuthorize("hasAuthority('WRITE')")
+    @PreAuthorize("hasAuthority('PERMISSION_UPDATE')")
     public ResponseEntity<PermissionResponse> updatePermission(
             @PathVariable Long id,
             @Valid @RequestBody PermissionRequest request) {
@@ -46,7 +46,7 @@ public class PermissionController {
     }
 
     @DeleteMapping("/{id}")
-    @PreAuthorize("hasAuthority('DELETE')")
+    @PreAuthorize("hasAuthority('PERMISSION_DELETE')")
     public ResponseEntity<Void> deletePermission(@PathVariable Long id) {
         permissionService.deletePermission(id);
         return ResponseEntity.noContent().build();
