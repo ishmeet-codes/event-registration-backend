@@ -167,18 +167,21 @@ public class UserServiceImpl implements UserService {
                 String[] cols = line.split(",", -1);
                 String fullName = safeGet(cols, idxFullName).trim();
                 String email    = safeGet(cols, idxEmail).trim();
-                String roleCode = idxRoleCode >= 0 ? safeGet(cols, idxRoleCode).trim() : "PARTICIPANT";
-                String password = idxPassword >= 0 ? safeGet(cols, idxPassword).trim() : "";
+                String rawRoleCode = idxRoleCode >= 0 ? safeGet(cols, idxRoleCode).trim() : "";
+                String rawPassword = idxPassword >= 0 ? safeGet(cols, idxPassword).trim() : "";
 
-                if (roleCode.isBlank()) roleCode = "PARTICIPANT";
-                if (password.isBlank()) password = UUID.randomUUID().toString().replace("-", "").substring(0, 12);
+                // Resolve to effectively-final values so they can be captured in lambdas
+                final String resolvedRoleCode = rawRoleCode.isBlank() ? "PARTICIPANT" : rawRoleCode;
+                final String resolvedPassword  = rawPassword.isBlank()
+                        ? UUID.randomUUID().toString().replace("-", "").substring(0, 12)
+                        : rawPassword;
 
                 BulkImportResultDto.RowResult.RowResultBuilder result =
                         BulkImportResultDto.RowResult.builder()
                                 .rowNumber(rowNum)
                                 .email(email)
                                 .fullName(fullName)
-                                .roleCode(roleCode);
+                                .roleCode(resolvedRoleCode);
 
                 try {
                     if (fullName.isBlank()) throw new IllegalArgumentException("fullName is required");
@@ -188,13 +191,13 @@ public class UserServiceImpl implements UserService {
                         throw new IllegalArgumentException("Email already exists: " + email);
                     }
 
-                    Role role = roleRepository.findByRoleCode(roleCode)
-                            .orElseThrow(() -> new IllegalArgumentException("Unknown role: " + roleCode));
+                    Role role = roleRepository.findByRoleCode(resolvedRoleCode)
+                            .orElseThrow(() -> new IllegalArgumentException("Unknown role: " + resolvedRoleCode));
 
                     User user = User.builder()
                             .fullName(fullName)
                             .email(email)
-                            .password(passwordEncoder.encode(password))
+                            .password(passwordEncoder.encode(resolvedPassword))
                             .role(role)
                             .active(true)
                             .build();
