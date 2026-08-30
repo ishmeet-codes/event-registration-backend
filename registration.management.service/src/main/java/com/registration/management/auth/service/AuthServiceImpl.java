@@ -42,6 +42,27 @@ public class AuthServiceImpl implements AuthService {
     @Value("${app.mail.reset-password-base-url}")
     private String resetPasswordBaseUrl;
 
+    @Autowired private com.registration.management.auth.repository.RoleRepository roleRepository;
+
+    @Override
+    public void register(RegisterRequest request) {
+        if (userRepository.findByEmail(request.getEmail()).isPresent()) {
+            throw new IllegalArgumentException("Email is already in use");
+        }
+        
+        com.registration.management.auth.entities.Role role = roleRepository.findByRoleCode("PARTICIPANT").orElse(null);
+
+        User user = User.builder()
+                .email(request.getEmail())
+                .password(passwordEncoder.encode(request.getPassword()))
+                .fullName(request.getUsername()) // Using username as full name for now
+                .active(true)
+                .role(role)
+                .build();
+                
+        userRepository.save(user);
+    }
+
     @Override
     public AuthResponse login(LoginRequest request) {
         Authentication auth = authenticationManager.authenticate(

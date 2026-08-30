@@ -1,0 +1,10 @@
+<component name="ProjectRunConfigurationManager">
+  <configuration default="false" name="Registration Management Service" type="SpringBootApplicationConfigurationType" factoryName="Spring Boot">
+    <module name="registration.management.service" />
+    <option name="SPRING_BOOT_MAIN_CLASS" value="com.registration.management.Application" />
+    <option name="WORKING_DIRECTORY" value="$PROJECT_DIR$/registration.management.service" />
+    <method v="2">
+      <option name="Make" enabled="true" />
+    </method>
+  </configuration>
+</component>

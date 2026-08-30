@@ -4,6 +4,7 @@ import com.registration.management.auth.dto.*;
 import com.registration.management.auth.entities.User;
 
 public interface AuthService {
+    void register(RegisterRequest request);
     AuthResponse login(LoginRequest request);
     AuthResponse refresh(TokenRefreshRequest request);
     void logout(String refreshToken);
