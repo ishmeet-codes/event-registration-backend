@@ -49,8 +49,15 @@ public class AuthServiceImpl implements AuthService {
         if (userRepository.findByEmail(request.getEmail()).isPresent()) {
             throw new IllegalArgumentException("Email is already in use");
         }
-        
-        com.registration.management.auth.entities.Role role = roleRepository.findByRoleCode("PARTICIPANT").orElse(null);
+
+        // Resolve the requested role; fall back to PARTICIPANT if not found
+        String requestedRoleCode = (request.getRoleCode() != null && !request.getRoleCode().isBlank())
+                ? request.getRoleCode()
+                : "PARTICIPANT";
+
+        com.registration.management.auth.entities.Role role = roleRepository
+                .findByRoleCode(requestedRoleCode)
+                .orElseGet(() -> roleRepository.findByRoleCode("PARTICIPANT").orElse(null));
 
         User user = User.builder()
                 .email(request.getEmail())
@@ -59,7 +66,7 @@ public class AuthServiceImpl implements AuthService {
                 .active(true)
                 .role(role)
                 .build();
-                
+
         userRepository.save(user);
     }
 
