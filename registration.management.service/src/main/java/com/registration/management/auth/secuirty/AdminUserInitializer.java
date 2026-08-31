@@ -15,12 +15,12 @@ public class AdminUserInitializer {
     @Bean
     public CommandLineRunner init(UserRepository userRepository, RoleRepository roleRepository, PasswordEncoder passwordEncoder) {
         return args -> {
+            Role superAdminRole = roleRepository.findByRoleCode("SUPER_ADMIN").orElse(null);
+
             String adminEmail = "admin@registration.com";
             String userEmail = "user@registration.com";
-            if (userRepository.findByEmail(adminEmail).isEmpty()) {
-                Role superAdminRole = roleRepository.findByRoleCode("SUPER_ADMIN")
-                        .orElseThrow(() -> new IllegalStateException("SUPER_ADMIN role not found in database"));
 
+            if (userRepository.findByEmail(adminEmail).isEmpty() && superAdminRole != null) {
                 User admin = User.builder()
                         .fullName("Admin")
                         .email(adminEmail)
@@ -30,22 +30,23 @@ public class AdminUserInitializer {
                         .build();
 
                 userRepository.save(admin);
-                System.out.println("Initialized admin user: " + admin);
+                System.out.println("Initialized admin user: " + adminEmail);
             }
+
             if (userRepository.findByEmail(userEmail).isEmpty()) {
-                Role REGISTRATION_TEAM = roleRepository.findByRoleCode("REGISTRATION_TEAM")
-                        .orElseThrow(() -> new IllegalStateException("REGISTRATION_TEAM role not found in database"));
+                Role registrationTeamRole = roleRepository.findByRoleCode("REGISTRATION_TEAM").orElse(null);
+                if (registrationTeamRole != null) {
+                    User user = User.builder()
+                            .fullName("User")
+                            .email(userEmail)
+                            .password(passwordEncoder.encode("user123"))
+                            .role(registrationTeamRole)
+                            .active(true)
+                            .build();
 
-                User user = User.builder()
-                        .fullName("User")
-                        .email(userEmail)
-                        .password(passwordEncoder.encode("user123"))
-                        .role(REGISTRATION_TEAM)
-                        .active(true)
-                        .build();
-
-                userRepository.save(user);
-                System.out.println("Initialized admin user: " + user);
+                    userRepository.save(user);
+                    System.out.println("Initialized user: " + userEmail);
+                }
             }
         };
     }

@@ -1,4 +1,4 @@
-package com.registration.management.school.entities;
+package com.registration.management.school.entity;
 
 import com.registration.management.auth.entities.User;
 import com.registration.management.enums.StaffRole;
