@@ -48,7 +48,6 @@ public class AdminUserInitializer {
                     userRepository.save(user);
                     System.out.println("Initialized user: " + userEmail);
                 }
-            }
-        };
+            };
+        }
     }
-}
