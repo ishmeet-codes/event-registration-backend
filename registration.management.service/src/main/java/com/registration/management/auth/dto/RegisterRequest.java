@@ -23,11 +23,11 @@ public class RegisterRequest {
 
     /**
      * Role the user is registering as. Only self-service roles are permitted.
-     * Defaults to ATTENDEE when not supplied.
+    * Defaults to PARTICIPANT when not supplied.
      */
     @Pattern(
-            regexp = "^(SCHOOL_INCHARGE|PARTICIPANT)$",
-            message = "Role must be either SCHOOL_INCHARGE or PARTICIPANT"
+            regexp = "^(SCHOOL_STAFF|PARTICIPANT)$",
+            message = "Role must be either SCHOOL_STAFF or PARTICIPANT"
     )
     private String roleCode = "PARTICIPANT";
 }

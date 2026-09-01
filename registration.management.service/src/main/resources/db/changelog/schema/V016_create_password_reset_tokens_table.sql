@@ -1,6 +1,6 @@
 --liquibase formatted sql
 
---changeset ishmeet:V023_create_password_reset_tokens_table
+--changeset ishmeet:V016_create_password_reset_tokens_table
 
 CREATE TABLE password_reset_tokens (
     id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,

@@ -33,14 +33,14 @@ public class AdminUserInitializer {
                 System.out.println("Initialized admin user: " + admin);
             }
             if (userRepository.findByEmail(userEmail).isEmpty()) {
-                Role REGISTRATION_TEAM = roleRepository.findByRoleCode("REGISTRATION_TEAM")
-                        .orElseThrow(() -> new IllegalStateException("REGISTRATION_TEAM role not found in database"));
+                Role adminRole = roleRepository.findByRoleCode("ADMIN")
+                    .orElseThrow(() -> new IllegalStateException("ADMIN role not found in database"));
 
                 User user = User.builder()
                         .fullName("User")
                         .email(userEmail)
                         .password(passwordEncoder.encode("user123"))
-                        .role(REGISTRATION_TEAM)
+                        .role(adminRole)
                         .active(true)
                         .build();
 
