@@ -34,20 +34,22 @@ public class AdminUserInitializer {
             }
 
             if (userRepository.findByEmail(userEmail).isEmpty()) {
-                Role REGISTRATION_TEAM = roleRepository.findByRoleCode("REGISTRATION_TEAM")
-                        .orElseThrow(() -> new IllegalStateException("REGISTRATION_TEAM role not found in database"));
+                Role userRole = roleRepository.findByRoleCode("ADMIN")
+                        .orElseGet(() -> roleRepository.findByRoleCode("SUPER_ADMIN").orElse(null));
 
-                User user = User.builder()
-                        .fullName("User")
-                        .email(userEmail)
-                        .password(passwordEncoder.encode("user123"))
-                        .role(REGISTRATION_TEAM)
-                        .active(true)
-                        .build();
+                if (userRole != null) {
+                    User user = User.builder()
+                            .fullName("User")
+                            .email(userEmail)
+                            .password(passwordEncoder.encode("user123"))
+                            .role(userRole)
+                            .active(true)
+                            .build();
 
                     userRepository.save(user);
                     System.out.println("Initialized user: " + userEmail);
                 }
-            };
-        }
+            }
+        };
+    }
     }

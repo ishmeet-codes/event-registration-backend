@@ -5,6 +5,7 @@ import com.registration.management.school.dto.schoolDTO;
 import com.registration.management.school.service.schoolService;
 import jakarta.validation.Valid;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.data.domain.Page;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
@@ -17,6 +18,22 @@ public class schoolController {
 
     @Autowired
     private schoolService schoolService;
+
+    @GetMapping
+    @PreAuthorize("hasAuthority('SCHOOL_VIEW')")
+    public ResponseEntity<Page<schoolDTO>> getSchools(
+            @RequestParam(required = false) String search,
+            @RequestParam(required = false) String city,
+            @RequestParam(required = false) String district,
+            @RequestParam(required = false) String state,
+            @RequestParam(required = false) String board,
+            @RequestParam(required = false) Boolean active,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "20") int size,
+            @RequestParam(defaultValue = "schoolName,asc") String sort) {
+        Page<schoolDTO> result = schoolService.getSchools(search, city, district, state, board, active, page, size, sort);
+        return ResponseEntity.ok(result);
+    }
 
     @PostMapping
     @PreAuthorize("hasAuthority('SCHOOL_CREATE')")

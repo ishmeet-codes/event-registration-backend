@@ -16,9 +16,21 @@ import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageImpl;
+import org.springframework.data.domain.PageRequest;
+
+import java.util.List;
+
+import static org.hamcrest.Matchers.hasSize;
 import static org.hamcrest.Matchers.is;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyBoolean;
+import static org.mockito.ArgumentMatchers.anyInt;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.when;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
@@ -103,5 +115,31 @@ class SchoolControllerTest {
                 .andExpect(jsonPath("$.errors.pincode", is("Pincode must be 6 digits")))
                 .andExpect(jsonPath("$.errors.phone", is("Phone number must be between 10 and 15 digits")))
                 .andExpect(jsonPath("$.errors.email", is("Invalid email format")));
+    }
+
+    @Test
+    void getSchools_Success() throws Exception {
+        schoolDTO school = SchoolTestDataFactory.createResponseSchoolDTO();
+        Page<schoolDTO> page = new PageImpl<>(List.of(school), PageRequest.of(0, 20), 1);
+
+        when(schoolService.getSchools(
+                eq("public"), eq("Ludhiana"), eq("Ludhiana"), eq("Punjab"), eq("CBSE"), eq(true), eq(0), eq(20), eq("schoolName,asc")))
+                .thenReturn(page);
+
+        mockMvc.perform(get("/api/schools")
+                        .param("search", "public")
+                        .param("city", "Ludhiana")
+                        .param("district", "Ludhiana")
+                        .param("state", "Punjab")
+                        .param("board", "CBSE")
+                        .param("active", "true")
+                        .param("page", "0")
+                        .param("size", "20")
+                        .param("sort", "schoolName,asc"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.content", hasSize(1)))
+                .andExpect(jsonPath("$.content[0].schoolCode", is("SCH001")))
+                .andExpect(jsonPath("$.totalElements", is(1)))
+                .andExpect(jsonPath("$.totalPages", is(1)));
     }
 }

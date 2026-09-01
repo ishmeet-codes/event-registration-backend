@@ -24,8 +24,16 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.modelmapper.ModelMapper;
 import org.modelmapper.convention.MatchingStrategies;
 
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageImpl;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.jpa.domain.Specification;
+
+import java.util.List;
+
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.*;
 
 @ExtendWith(MockitoExtension.class)
@@ -111,5 +119,53 @@ class SchoolServiceImplTest {
         assertTrue(exception.getMessage().contains("School code already exists: SCH001"));
         verify(schoolRepository, never()).save(any());
         verify(auditLogRepository, never()).save(any());
+    }
+
+    @Test
+    void getSchools_Success() {
+        School school = SchoolTestDataFactory.createSchoolEntity(currentUser);
+        Page<School> schoolPage = new PageImpl<>(List.of(school));
+
+        when(schoolRepository.findAll(any(Specification.class), any(Pageable.class))).thenReturn(schoolPage);
+
+        Page<schoolDTO> result = schoolService.getSchools("ABC", "Ludhiana", "Ludhiana", "Punjab", "CBSE", true, 0, 20, "schoolName,asc");
+
+        assertNotNull(result);
+        assertEquals(1, result.getTotalElements());
+        assertEquals("SCH001", result.getContent().get(0).getSchoolCode());
+
+        ArgumentCaptor<Pageable> pageableCaptor = ArgumentCaptor.forClass(Pageable.class);
+        verify(schoolRepository).findAll(any(Specification.class), pageableCaptor.capture());
+        Pageable pageable = pageableCaptor.getValue();
+        assertEquals(0, pageable.getPageNumber());
+        assertEquals(20, pageable.getPageSize());
+        assertEquals("schoolName: ASC", pageable.getSort().toString());
+    }
+
+    @Test
+    void getSchools_CapsPageSizeTo100() {
+        Page<School> emptyPage = new PageImpl<>(List.of());
+        when(schoolRepository.findAll(any(Specification.class), any(Pageable.class))).thenReturn(emptyPage);
+
+        schoolService.getSchools(null, null, null, null, null, null, 0, 250, "createdAt,desc");
+
+        ArgumentCaptor<Pageable> pageableCaptor = ArgumentCaptor.forClass(Pageable.class);
+        verify(schoolRepository).findAll(any(Specification.class), pageableCaptor.capture());
+        Pageable pageable = pageableCaptor.getValue();
+        assertEquals(100, pageable.getPageSize());
+        assertEquals("createdAt: DESC", pageable.getSort().toString());
+    }
+
+    @Test
+    void getSchools_InvalidSortField_FallsBackToDefaultSort() {
+        Page<School> emptyPage = new PageImpl<>(List.of());
+        when(schoolRepository.findAll(any(Specification.class), any(Pageable.class))).thenReturn(emptyPage);
+
+        schoolService.getSchools(null, null, null, null, null, null, 0, 20, "unauthorizedColumn,asc");
+
+        ArgumentCaptor<Pageable> pageableCaptor = ArgumentCaptor.forClass(Pageable.class);
+        verify(schoolRepository).findAll(any(Specification.class), pageableCaptor.capture());
+        Pageable pageable = pageableCaptor.getValue();
+        assertEquals("schoolName: ASC", pageable.getSort().toString());
     }
 }
