@@ -3,8 +3,9 @@ package com.registration.management.registration.entities;
 import com.registration.management.auth.entities.User;
 import com.registration.management.enums.RegistrationStatus;
 import com.registration.management.event.entities.Event;
-import com.registration.management.school.entities.School;
-import com.registration.management.school.entities.SchoolStaff;
+import com.registration.management.school.entity.School;
+import com.registration.management.school.entity.SchoolStaff;
+
 import jakarta.persistence.*;
 import jakarta.validation.constraints.Size;
 import lombok.*;

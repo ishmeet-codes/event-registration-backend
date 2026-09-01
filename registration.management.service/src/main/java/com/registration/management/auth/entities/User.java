@@ -1,7 +1,8 @@
 package com.registration.management.auth.entities;
 
 import com.registration.management.registration.entities.Checkin;
-import com.registration.management.school.entities.SchoolStaff;
+import com.registration.management.school.entity.SchoolStaff;
+
 import jakarta.persistence.*;
 import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;
