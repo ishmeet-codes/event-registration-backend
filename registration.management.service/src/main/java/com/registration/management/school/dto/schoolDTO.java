@@ -20,7 +20,6 @@ public class schoolDTO {
 
     private Long id;
 
-    @NotBlank(message = "School code is required")
     @Size(max = 50, message = "School code must not exceed 50 characters")
     private String schoolCode;
 

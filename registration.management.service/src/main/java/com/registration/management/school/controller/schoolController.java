@@ -75,4 +75,13 @@ public class schoolController {
         schoolDTO response = schoolService.updateSchoolStatus(schoolId, request.getActive(), currentUser);
         return ResponseEntity.ok(response);
     }
+
+    @DeleteMapping("/{schoolId}")
+    @PreAuthorize("hasAuthority('SCHOOL_DELETE')")
+    public ResponseEntity<Void> deleteSchool(
+            @PathVariable("schoolId") Long schoolId,
+            @AuthenticationPrincipal User currentUser) {
+        schoolService.deleteSchool(schoolId, currentUser);
+        return ResponseEntity.noContent().build();
+    }
 }

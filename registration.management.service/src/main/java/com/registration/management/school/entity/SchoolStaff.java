@@ -11,7 +11,9 @@ import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Size;
 import lombok.*;
 import org.hibernate.annotations.CreationTimestamp;
+import org.hibernate.annotations.JdbcTypeCode;
 import org.hibernate.annotations.UpdateTimestamp;
+import org.hibernate.type.SqlTypes;
 
 import java.time.LocalDateTime;
 import java.util.HashSet;
@@ -74,7 +76,8 @@ public class SchoolStaff {
     private String email;
 
     @Enumerated(EnumType.STRING)
-    @Column(name = "staff_role", nullable = false)
+    @JdbcTypeCode(SqlTypes.NAMED_ENUM)
+    @Column(name = "staff_role", columnDefinition = "staff_role", nullable = false)
     private StaffRole staffRole;
 
     @Column(name = "active", nullable = false)

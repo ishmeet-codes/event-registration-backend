@@ -25,6 +25,7 @@ import org.modelmapper.ModelMapper;
 import org.modelmapper.convention.MatchingStrategies;
 
 import jakarta.persistence.EntityNotFoundException;
+import org.mockito.ArgumentMatchers;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.Pageable;
@@ -35,7 +36,6 @@ import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.*;
 
 @ExtendWith(MockitoExtension.class)
@@ -110,6 +110,31 @@ class SchoolServiceImplTest {
     }
 
     @Test
+    void createSchool_AutogeneratesSchoolCode_WhenCodeNotProvided() {
+        requestDto.setSchoolCode(null);
+        when(schoolRepository.existsBySchoolCode(anyString())).thenReturn(false);
+
+        when(schoolRepository.save(any(School.class))).thenAnswer(invocation -> {
+            School s = invocation.getArgument(0);
+            s.setId(101L);
+            return s;
+        });
+
+        schoolDTO result = schoolService.createSchool(requestDto, currentUser);
+
+        assertNotNull(result);
+        assertNotNull(result.getSchoolCode());
+        assertTrue(result.getSchoolCode().matches("^SCH[A-Z0-9]{6}$"), "School code should match SCH + 6 alphanumeric characters");
+        assertEquals(9, result.getSchoolCode().length());
+
+        ArgumentCaptor<School> schoolCaptor = ArgumentCaptor.forClass(School.class);
+        verify(schoolRepository).save(schoolCaptor.capture());
+        School entityToSave = schoolCaptor.getValue();
+        assertTrue(entityToSave.getSchoolCode().matches("^SCH[A-Z0-9]{6}$"));
+        assertTrue(entityToSave.isActive());
+    }
+
+    @Test
     void createSchool_DuplicateCode_ThrowsSchoolCodeException() {
         when(schoolRepository.existsBySchoolCode("SCH001")).thenReturn(true);
 
@@ -128,7 +153,7 @@ class SchoolServiceImplTest {
         School school = SchoolTestDataFactory.createSchoolEntity(currentUser);
         Page<School> schoolPage = new PageImpl<>(List.of(school));
 
-        when(schoolRepository.findAll(any(Specification.class), any(Pageable.class))).thenReturn(schoolPage);
+        when(schoolRepository.findAll(ArgumentMatchers.<Specification<School>>any(), any(Pageable.class))).thenReturn(schoolPage);
 
         Page<schoolDTO> result = schoolService.getSchools("ABC", "Ludhiana", "Ludhiana", "Punjab", "CBSE", true, 0, 20, "schoolName,asc");
 
@@ -137,7 +162,7 @@ class SchoolServiceImplTest {
         assertEquals("SCH001", result.getContent().get(0).getSchoolCode());
 
         ArgumentCaptor<Pageable> pageableCaptor = ArgumentCaptor.forClass(Pageable.class);
-        verify(schoolRepository).findAll(any(Specification.class), pageableCaptor.capture());
+        verify(schoolRepository).findAll(ArgumentMatchers.<Specification<School>>any(), pageableCaptor.capture());
         Pageable pageable = pageableCaptor.getValue();
         assertEquals(0, pageable.getPageNumber());
         assertEquals(20, pageable.getPageSize());
@@ -147,12 +172,12 @@ class SchoolServiceImplTest {
     @Test
     void getSchools_CapsPageSizeTo100() {
         Page<School> emptyPage = new PageImpl<>(List.of());
-        when(schoolRepository.findAll(any(Specification.class), any(Pageable.class))).thenReturn(emptyPage);
+        when(schoolRepository.findAll(ArgumentMatchers.<Specification<School>>any(), any(Pageable.class))).thenReturn(emptyPage);
 
         schoolService.getSchools(null, null, null, null, null, null, 0, 250, "createdAt,desc");
 
         ArgumentCaptor<Pageable> pageableCaptor = ArgumentCaptor.forClass(Pageable.class);
-        verify(schoolRepository).findAll(any(Specification.class), pageableCaptor.capture());
+        verify(schoolRepository).findAll(ArgumentMatchers.<Specification<School>>any(), pageableCaptor.capture());
         Pageable pageable = pageableCaptor.getValue();
         assertEquals(100, pageable.getPageSize());
         assertEquals("createdAt: DESC", pageable.getSort().toString());
@@ -161,12 +186,12 @@ class SchoolServiceImplTest {
     @Test
     void getSchools_InvalidSortField_FallsBackToDefaultSort() {
         Page<School> emptyPage = new PageImpl<>(List.of());
-        when(schoolRepository.findAll(any(Specification.class), any(Pageable.class))).thenReturn(emptyPage);
+        when(schoolRepository.findAll(ArgumentMatchers.<Specification<School>>any(), any(Pageable.class))).thenReturn(emptyPage);
 
         schoolService.getSchools(null, null, null, null, null, null, 0, 20, "unauthorizedColumn,asc");
 
         ArgumentCaptor<Pageable> pageableCaptor = ArgumentCaptor.forClass(Pageable.class);
-        verify(schoolRepository).findAll(any(Specification.class), pageableCaptor.capture());
+        verify(schoolRepository).findAll(ArgumentMatchers.<Specification<School>>any(), pageableCaptor.capture());
         Pageable pageable = pageableCaptor.getValue();
         assertEquals("schoolName: ASC", pageable.getSort().toString());
     }
@@ -369,6 +394,52 @@ class SchoolServiceImplTest {
         EntityNotFoundException ex = assertThrows(
                 EntityNotFoundException.class,
                 () -> schoolService.updateSchoolStatus(999L, false, currentUser)
+        );
+
+        assertTrue(ex.getMessage().contains("School not found with id: 999"));
+        verify(schoolRepository, never()).save(any());
+        verify(auditLogRepository, never()).save(any());
+    }
+
+    @Test
+    void deleteSchool_Success() {
+        School existingSchool = SchoolTestDataFactory.createSchoolEntity(currentUser);
+        existingSchool.setActive(true);
+        when(schoolRepository.findById(100L)).thenReturn(Optional.of(existingSchool));
+        when(schoolRepository.save(any(School.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        schoolService.deleteSchool(100L, currentUser);
+
+        ArgumentCaptor<School> schoolCaptor = ArgumentCaptor.forClass(School.class);
+        verify(schoolRepository).save(schoolCaptor.capture());
+        School savedSchool = schoolCaptor.getValue();
+        assertEquals(100L, savedSchool.getId());
+        assertFalse(savedSchool.isActive());
+        assertEquals(currentUser, savedSchool.getCreatedBy());
+        assertEquals(currentUser, savedSchool.getUpdatedBy());
+
+        // Verify AuditLog for DELETE
+        ArgumentCaptor<AuditLog> auditCaptor = ArgumentCaptor.forClass(AuditLog.class);
+        verify(auditLogRepository).save(auditCaptor.capture());
+        AuditLog auditLog = auditCaptor.getValue();
+        assertEquals("School", auditLog.getEntityName());
+        assertEquals(100L, auditLog.getEntityId());
+        assertEquals(AuditAction.DELETE, auditLog.getAction());
+        assertEquals(AuditStatus.SUCCESS, auditLog.getStatus());
+        assertEquals(currentUser, auditLog.getUser());
+        assertNotNull(auditLog.getOldValue());
+        assertNotNull(auditLog.getNewValue());
+        assertTrue(auditLog.getOldValue().contains("\"active\":true"));
+        assertTrue(auditLog.getNewValue().contains("\"active\":false"));
+    }
+
+    @Test
+    void deleteSchool_NotFound_ThrowsEntityNotFoundException() {
+        when(schoolRepository.findById(999L)).thenReturn(Optional.empty());
+
+        EntityNotFoundException ex = assertThrows(
+                EntityNotFoundException.class,
+                () -> schoolService.deleteSchool(999L, currentUser)
         );
 
         assertTrue(ex.getMessage().contains("School not found with id: 999"));

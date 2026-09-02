@@ -38,6 +38,9 @@ public class schoolServiceImpl implements schoolService {
             "schoolCode", "schoolName", "principalName", "city", "district", "state", "createdAt", "updatedAt"
     );
 
+    private static final String ALPHANUMERIC = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
+    private static final java.security.SecureRandom RANDOM = new java.security.SecureRandom();
+
     @Autowired
     private schoolRepository schoolRepository;
 
@@ -55,9 +58,15 @@ public class schoolServiceImpl implements schoolService {
 
     @Override
     public schoolDTO createSchool(schoolDTO request, User currentUser) {
-        // 1. Validate school code uniqueness
-        if (schoolRepository.existsBySchoolCode(request.getSchoolCode())) {
-            throw new SchoolCodeException("School code already exists: " + request.getSchoolCode());
+        // 1. Resolve or autogenerate school code (SCH + 6 alphanumeric characters)
+        String schoolCode = request.getSchoolCode();
+        if (schoolCode == null || schoolCode.isBlank()) {
+            schoolCode = generateUniqueSchoolCode();
+        } else {
+            schoolCode = schoolCode.trim();
+            if (schoolRepository.existsBySchoolCode(schoolCode)) {
+                throw new SchoolCodeException("School code already exists: " + schoolCode);
+            }
         }
 
         // 2. Resolve authenticated user if not provided directly
@@ -65,6 +74,7 @@ public class schoolServiceImpl implements schoolService {
 
         // 3. Map request DTO to School entity using ModelMapper & set system attributes
         School school = modelMapper.map(request, School.class);
+        school.setSchoolCode(schoolCode);
         school.setActive(true);
         school.setCreatedBy(currentUser);
 
@@ -95,10 +105,12 @@ public class schoolServiceImpl implements schoolService {
         School school = schoolRepository.findById(schoolId)
                 .orElseThrow(() -> new EntityNotFoundException("School not found with id: " + schoolId));
 
-        if (request.getSchoolCode() != null && !request.getSchoolCode().equals(school.getSchoolCode())) {
-            if (schoolRepository.existsBySchoolCode(request.getSchoolCode())) {
-                throw new SchoolCodeException("School code already exists: " + request.getSchoolCode());
+        if (request.getSchoolCode() != null && !request.getSchoolCode().isBlank() && !request.getSchoolCode().trim().equals(school.getSchoolCode())) {
+            String newSchoolCode = request.getSchoolCode().trim();
+            if (schoolRepository.existsBySchoolCode(newSchoolCode)) {
+                throw new SchoolCodeException("School code already exists: " + newSchoolCode);
             }
+            school.setSchoolCode(newSchoolCode);
         }
 
         currentUser = resolveCurrentUser(currentUser);
@@ -111,7 +123,6 @@ public class schoolServiceImpl implements schoolService {
             // Do not break transaction if old value serialization fails
         }
 
-        school.setSchoolCode(request.getSchoolCode());
         school.setSchoolName(request.getSchoolName());
         school.setPrincipalName(request.getPrincipalName());
         school.setBoard(request.getBoard());
@@ -187,6 +198,44 @@ public class schoolServiceImpl implements schoolService {
         }
 
         return responseDto;
+    }
+
+    @Override
+    public void deleteSchool(Long schoolId, User currentUser) {
+        School school = schoolRepository.findById(schoolId)
+                .orElseThrow(() -> new EntityNotFoundException("School not found with id: " + schoolId));
+
+        currentUser = resolveCurrentUser(currentUser);
+
+        schoolDTO oldDto = toDto(school);
+        String oldValueJson = null;
+        try {
+            oldValueJson = objectMapper.writeValueAsString(oldDto);
+        } catch (Exception e) {
+            // Do not break transaction if old value serialization fails
+        }
+
+        school.setActive(false);
+        school.setUpdatedBy(currentUser);
+
+        School savedSchool = schoolRepository.save(school);
+        schoolDTO responseDto = toDto(savedSchool);
+
+        try {
+            String newValueJson = objectMapper.writeValueAsString(responseDto);
+            AuditLog auditLog = AuditLog.builder()
+                    .user(currentUser)
+                    .entityName("School")
+                    .entityId(savedSchool.getId())
+                    .action(AuditAction.DELETE)
+                    .status(AuditStatus.SUCCESS)
+                    .oldValue(oldValueJson)
+                    .newValue(newValueJson)
+                    .build();
+            auditLogRepository.save(auditLog);
+        } catch (Exception e) {
+            // Do not break school deletion transaction if audit serialization fails
+        }
     }
 
     @Override
@@ -315,5 +364,17 @@ public class schoolServiceImpl implements schoolService {
             }
         }
         return currentUser;
+    }
+
+    private String generateUniqueSchoolCode() {
+        String code;
+        do {
+            StringBuilder sb = new StringBuilder("SCH");
+            for (int i = 0; i < 6; i++) {
+                sb.append(ALPHANUMERIC.charAt(RANDOM.nextInt(ALPHANUMERIC.length())));
+            }
+            code = sb.toString();
+        } while (schoolRepository.existsBySchoolCode(code));
+        return code;
     }
 }

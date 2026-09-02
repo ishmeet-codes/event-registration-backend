@@ -9,7 +9,9 @@ import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Size;
 import lombok.*;
 import org.hibernate.annotations.CreationTimestamp;
+import org.hibernate.annotations.JdbcTypeCode;
 import org.hibernate.annotations.UpdateTimestamp;
+import org.hibernate.type.SqlTypes;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
@@ -51,7 +53,8 @@ public class Participant {
     private String fullName;
 
     @Enumerated(EnumType.STRING)
-    @Column(name = "gender", nullable = false)
+    @JdbcTypeCode(SqlTypes.NAMED_ENUM)
+    @Column(name = "gender", columnDefinition = "gender", nullable = false)
     private Gender gender;
 
     @Size(max = 20)

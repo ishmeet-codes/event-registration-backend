@@ -26,11 +26,11 @@ import java.util.List;
 import static org.hamcrest.Matchers.hasSize;
 import static org.hamcrest.Matchers.is;
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.anyBoolean;
-import static org.mockito.ArgumentMatchers.anyInt;
-import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.doNothing;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.when;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -100,9 +100,25 @@ class SchoolControllerTest {
     }
 
     @Test
+    void createSchool_WithoutSchoolCode_Success() throws Exception {
+        schoolDTO requestDto = SchoolTestDataFactory.createValidSchoolDTO();
+        requestDto.setSchoolCode(null);
+        schoolDTO responseDto = SchoolTestDataFactory.createResponseSchoolDTO();
+        responseDto.setSchoolCode("SCHA1B2C3");
+
+        when(schoolService.createSchool(any(schoolDTO.class), any())).thenReturn(responseDto);
+
+        mockMvc.perform(post("/api/schools")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(requestDto)))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.id", is(1)))
+                .andExpect(jsonPath("$.schoolCode", is("SCHA1B2C3")));
+    }
+
+    @Test
     void createSchool_ValidationFailure_BlankRequiredFields() throws Exception {
         schoolDTO invalidDto = schoolDTO.builder()
-                .schoolCode("")
                 .schoolName("")
                 .pincode("123")
                 .phone("123")
@@ -113,7 +129,6 @@ class SchoolControllerTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(invalidDto)))
                 .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.errors.schoolCode", is("School code is required")))
                 .andExpect(jsonPath("$.errors.schoolName", is("School name is required")))
                 .andExpect(jsonPath("$.errors.pincode", is("Pincode must be 6 digits")))
                 .andExpect(jsonPath("$.errors.phone", is("Phone number must be between 10 and 15 digits")))
@@ -292,6 +307,24 @@ class SchoolControllerTest {
         mockMvc.perform(patch("/api/schools/999/status")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(statusRequest)))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.error", is("School not found with id: 999")));
+    }
+
+    @Test
+    void deleteSchool_Success() throws Exception {
+        doNothing().when(schoolService).deleteSchool(eq(1L), any());
+
+        mockMvc.perform(delete("/api/schools/1"))
+                .andExpect(status().isNoContent());
+    }
+
+    @Test
+    void deleteSchool_NotFound_Returns404() throws Exception {
+        doThrow(new jakarta.persistence.EntityNotFoundException("School not found with id: 999"))
+                .when(schoolService).deleteSchool(eq(999L), any());
+
+        mockMvc.perform(delete("/api/schools/999"))
                 .andExpect(status().isNotFound())
                 .andExpect(jsonPath("$.error", is("School not found with id: 999")));
     }

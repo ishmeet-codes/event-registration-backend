@@ -35,6 +35,28 @@ class GlobalExceptionHandlerTest {
     }
 
     @Test
+    void handleSchoolNotActiveException_ReturnsBadRequest() {
+        SchoolNotActiveException ex = new SchoolNotActiveException("School is not active with id: 1");
+        ResponseEntity<Map<String, String>> response = exceptionHandler.handleSchoolNotActiveException(ex);
+
+        assertNotNull(response);
+        assertEquals(HttpStatus.BAD_REQUEST, response.getStatusCode());
+        assertNotNull(response.getBody());
+        assertEquals("School is not active with id: 1", response.getBody().get("error"));
+    }
+
+    @Test
+    void handleStaffRoleNotFoundException_ReturnsBadRequest() {
+        StaffRoleNotFoundException ex = new StaffRoleNotFoundException("Staff role is required");
+        ResponseEntity<Map<String, String>> response = exceptionHandler.handleStaffRoleNotFoundException(ex);
+
+        assertNotNull(response);
+        assertEquals(HttpStatus.BAD_REQUEST, response.getStatusCode());
+        assertNotNull(response.getBody());
+        assertEquals("Staff role is required", response.getBody().get("error"));
+    }
+
+    @Test
     void handleBadCredentialsException_ReturnsUnauthorized() {
         BadCredentialsException ex = new BadCredentialsException("Bad credentials");
         ResponseEntity<Map<String, String>> response = exceptionHandler.handleBadCredentialsException(ex);

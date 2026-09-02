@@ -1,6 +1,9 @@
 package com.registration.management.common.exception;
 
 import com.registration.management.school.exception.SchoolCodeException;
+import com.registration.management.school.exception.SchoolNotActiveException;
+import com.registration.management.school.exception.StaffConflictException;
+import com.registration.management.school.exception.StaffRoleNotFoundException;
 import jakarta.persistence.EntityNotFoundException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -22,8 +25,23 @@ public class GlobalExceptionHandler {
         return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(Map.of("error", "Invalid email or password"));
     }
 
+    @ExceptionHandler(StaffConflictException.class)
+    public ResponseEntity<Map<String, String>> handleStaffConflictException(StaffConflictException ex) {
+        return ResponseEntity.status(HttpStatus.CONFLICT).body(Map.of("error", ex.getMessage()));
+    }
+
     @ExceptionHandler(SchoolCodeException.class)
     public ResponseEntity<Map<String, String>> handleSchoolCodeException(SchoolCodeException ex) {
+        return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(Map.of("error", ex.getMessage()));
+    }
+
+    @ExceptionHandler(SchoolNotActiveException.class)
+    public ResponseEntity<Map<String, String>> handleSchoolNotActiveException(SchoolNotActiveException ex) {
+        return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(Map.of("error", ex.getMessage()));
+    }
+
+    @ExceptionHandler(StaffRoleNotFoundException.class)
+    public ResponseEntity<Map<String, String>> handleStaffRoleNotFoundException(StaffRoleNotFoundException ex) {
         return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(Map.of("error", ex.getMessage()));
     }
 

@@ -43,7 +43,8 @@ public class AuditLog {
     private Long entityId;
 
     @Enumerated(EnumType.STRING)
-    @Column(name = "action", nullable = false)
+    @JdbcTypeCode(SqlTypes.NAMED_ENUM)
+    @Column(name = "action", columnDefinition = "audit_action", nullable = false)
     private AuditAction action;
 
     @JdbcTypeCode(SqlTypes.JSON)
@@ -55,7 +56,8 @@ public class AuditLog {
     private String newValue;
 
     @Enumerated(EnumType.STRING)
-    @Column(name = "status", nullable = false)
+    @JdbcTypeCode(SqlTypes.NAMED_ENUM)
+    @Column(name = "status", columnDefinition = "audit_status", nullable = false)
     private AuditStatus status;
 
     @Column(name = "error_message", columnDefinition = "TEXT")
