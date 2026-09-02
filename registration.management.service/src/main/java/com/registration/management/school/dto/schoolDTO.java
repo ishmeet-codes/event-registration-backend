@@ -1,5 +1,6 @@
 package com.registration.management.school.dto;
 
+import com.fasterxml.jackson.annotation.JsonInclude;
 import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Pattern;
@@ -59,4 +60,10 @@ public class schoolDTO {
     private String createdByName;
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;
+
+    @JsonInclude(JsonInclude.Include.NON_NULL)
+    private Long staffCount;
+
+    @JsonInclude(JsonInclude.Include.NON_NULL)
+    private Long registrationCount;
 }

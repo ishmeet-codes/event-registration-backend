@@ -35,6 +35,17 @@ public class schoolController {
         return ResponseEntity.ok(result);
     }
 
+    @GetMapping("/{schoolId}")
+    @PreAuthorize("hasAuthority('SCHOOL_VIEW')")
+    public ResponseEntity<schoolDTO> getSchoolById(
+            @PathVariable("schoolId") Long schoolId,
+            @RequestParam(required = false) Boolean includeSummary,
+            @RequestParam(required = false) Boolean summary) {
+        boolean withSummary = Boolean.TRUE.equals(includeSummary) || Boolean.TRUE.equals(summary);
+        schoolDTO result = schoolService.getSchoolById(schoolId, withSummary);
+        return ResponseEntity.ok(result);
+    }
+
     @PostMapping
     @PreAuthorize("hasAuthority('SCHOOL_CREATE')")
     public ResponseEntity<schoolDTO> createSchool(

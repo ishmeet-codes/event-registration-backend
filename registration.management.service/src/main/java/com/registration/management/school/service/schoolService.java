@@ -8,6 +8,8 @@ public interface schoolService {
 
     schoolDTO createSchool(schoolDTO request, User currentUser);
 
+    schoolDTO getSchoolById(Long schoolId, boolean includeSummary);
+
     Page<schoolDTO> getSchools(
             String search,
             String city,

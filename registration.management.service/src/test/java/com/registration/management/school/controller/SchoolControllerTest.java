@@ -142,4 +142,71 @@ class SchoolControllerTest {
                 .andExpect(jsonPath("$.totalElements", is(1)))
                 .andExpect(jsonPath("$.totalPages", is(1)));
     }
+
+    @Test
+    void getSchoolById_Success_WithoutSummary() throws Exception {
+        schoolDTO school = SchoolTestDataFactory.createResponseSchoolDTO();
+
+        when(schoolService.getSchoolById(1L, false)).thenReturn(school);
+
+        mockMvc.perform(get("/api/schools/1"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.id", is(1)))
+                .andExpect(jsonPath("$.schoolCode", is("SCH001")))
+                .andExpect(jsonPath("$.schoolName", is("ABC Public School")))
+                .andExpect(jsonPath("$.principalName", is("Rajesh Kumar")))
+                .andExpect(jsonPath("$.board", is("CBSE")))
+                .andExpect(jsonPath("$.city", is("Ludhiana")))
+                .andExpect(jsonPath("$.active", is(true)))
+                .andExpect(jsonPath("$.staffCount").doesNotExist())
+                .andExpect(jsonPath("$.registrationCount").doesNotExist());
+    }
+
+    @Test
+    void getSchoolById_Success_WithIncludeSummary() throws Exception {
+        schoolDTO school = SchoolTestDataFactory.createResponseSchoolDTO();
+        school.setStaffCount(4L);
+        school.setRegistrationCount(3L);
+
+        when(schoolService.getSchoolById(1L, true)).thenReturn(school);
+
+        mockMvc.perform(get("/api/schools/1")
+                        .param("includeSummary", "true"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.id", is(1)))
+                .andExpect(jsonPath("$.schoolCode", is("SCH001")))
+                .andExpect(jsonPath("$.schoolName", is("ABC Public School")))
+                .andExpect(jsonPath("$.principalName", is("Rajesh Kumar")))
+                .andExpect(jsonPath("$.board", is("CBSE")))
+                .andExpect(jsonPath("$.city", is("Ludhiana")))
+                .andExpect(jsonPath("$.active", is(true)))
+                .andExpect(jsonPath("$.staffCount", is(4)))
+                .andExpect(jsonPath("$.registrationCount", is(3)));
+    }
+
+    @Test
+    void getSchoolById_Success_WithSummaryParam() throws Exception {
+        schoolDTO school = SchoolTestDataFactory.createResponseSchoolDTO();
+        school.setStaffCount(4L);
+        school.setRegistrationCount(3L);
+
+        when(schoolService.getSchoolById(1L, true)).thenReturn(school);
+
+        mockMvc.perform(get("/api/schools/1")
+                        .param("summary", "true"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.id", is(1)))
+                .andExpect(jsonPath("$.staffCount", is(4)))
+                .andExpect(jsonPath("$.registrationCount", is(3)));
+    }
+
+    @Test
+    void getSchoolById_NotFound_Returns404() throws Exception {
+        when(schoolService.getSchoolById(999L, false))
+                .thenThrow(new jakarta.persistence.EntityNotFoundException("School not found with id: 999"));
+
+        mockMvc.perform(get("/api/schools/999"))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.error", is("School not found with id: 999")));
+    }
 }

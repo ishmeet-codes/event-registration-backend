@@ -24,12 +24,14 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.modelmapper.ModelMapper;
 import org.modelmapper.convention.MatchingStrategies;
 
+import jakarta.persistence.EntityNotFoundException;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.domain.Specification;
 
 import java.util.List;
+import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.any;
@@ -167,5 +169,54 @@ class SchoolServiceImplTest {
         verify(schoolRepository).findAll(any(Specification.class), pageableCaptor.capture());
         Pageable pageable = pageableCaptor.getValue();
         assertEquals("schoolName: ASC", pageable.getSort().toString());
+    }
+
+    @Test
+    void getSchoolById_Success_WithoutSummary() {
+        School school = SchoolTestDataFactory.createSchoolEntity(currentUser);
+        when(schoolRepository.findById(100L)).thenReturn(Optional.of(school));
+
+        schoolDTO result = schoolService.getSchoolById(100L, false);
+
+        assertNotNull(result);
+        assertEquals(100L, result.getId());
+        assertEquals("SCH001", result.getSchoolCode());
+        assertEquals("ABC Public School", result.getSchoolName());
+        assertNull(result.getStaffCount());
+        assertNull(result.getRegistrationCount());
+
+        verify(schoolRepository, never()).countStaffBySchoolId(anyLong());
+        verify(schoolRepository, never()).countRegistrationsBySchoolId(anyLong());
+    }
+
+    @Test
+    void getSchoolById_Success_WithSummary() {
+        School school = SchoolTestDataFactory.createSchoolEntity(currentUser);
+        when(schoolRepository.findById(100L)).thenReturn(Optional.of(school));
+        when(schoolRepository.countStaffBySchoolId(100L)).thenReturn(4L);
+        when(schoolRepository.countRegistrationsBySchoolId(100L)).thenReturn(3L);
+
+        schoolDTO result = schoolService.getSchoolById(100L, true);
+
+        assertNotNull(result);
+        assertEquals(100L, result.getId());
+        assertEquals("SCH001", result.getSchoolCode());
+        assertEquals(4L, result.getStaffCount());
+        assertEquals(3L, result.getRegistrationCount());
+
+        verify(schoolRepository).countStaffBySchoolId(100L);
+        verify(schoolRepository).countRegistrationsBySchoolId(100L);
+    }
+
+    @Test
+    void getSchoolById_NotFound_ThrowsEntityNotFoundException() {
+        when(schoolRepository.findById(999L)).thenReturn(Optional.empty());
+
+        EntityNotFoundException ex = assertThrows(
+                EntityNotFoundException.class,
+                () -> schoolService.getSchoolById(999L, false)
+        );
+
+        assertTrue(ex.getMessage().contains("School not found with id: 999"));
     }
 }

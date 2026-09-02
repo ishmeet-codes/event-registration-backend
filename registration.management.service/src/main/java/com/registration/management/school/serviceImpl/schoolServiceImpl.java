@@ -19,6 +19,7 @@ import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
 import org.springframework.data.jpa.domain.Specification;
+import jakarta.persistence.EntityNotFoundException;
 import jakarta.persistence.criteria.Predicate;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
@@ -93,6 +94,22 @@ public class schoolServiceImpl implements schoolService {
         }
 
         return responseDto;
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public schoolDTO getSchoolById(Long schoolId, boolean includeSummary) {
+        School school = schoolRepository.findById(schoolId)
+                .orElseThrow(() -> new EntityNotFoundException("School not found with id: " + schoolId));
+
+        schoolDTO dto = toDto(school);
+        if (includeSummary) {
+            long staffCount = schoolRepository.countStaffBySchoolId(schoolId);
+            long registrationCount = schoolRepository.countRegistrationsBySchoolId(schoolId);
+            dto.setStaffCount(staffCount);
+            dto.setRegistrationCount(registrationCount);
+        }
+        return dto;
     }
 
     @Override
