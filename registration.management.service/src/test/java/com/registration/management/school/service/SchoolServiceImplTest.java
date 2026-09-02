@@ -219,4 +219,97 @@ class SchoolServiceImplTest {
 
         assertTrue(ex.getMessage().contains("School not found with id: 999"));
     }
+
+    @Test
+    void updateSchool_Success() {
+        School existingSchool = SchoolTestDataFactory.createSchoolEntity(currentUser);
+        when(schoolRepository.findById(100L)).thenReturn(Optional.of(existingSchool));
+        when(schoolRepository.save(any(School.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        schoolDTO updateRequest = SchoolTestDataFactory.createValidSchoolDTO();
+        updateRequest.setSchoolName("Updated Public School");
+        updateRequest.setCity("Amritsar");
+
+        schoolDTO result = schoolService.updateSchool(100L, updateRequest, currentUser);
+
+        assertNotNull(result);
+        assertEquals(100L, result.getId());
+        assertEquals("Updated Public School", result.getSchoolName());
+        assertEquals("Amritsar", result.getCity());
+
+        ArgumentCaptor<School> schoolCaptor = ArgumentCaptor.forClass(School.class);
+        verify(schoolRepository).save(schoolCaptor.capture());
+        School savedEntity = schoolCaptor.getValue();
+        assertEquals(100L, savedEntity.getId());
+        assertEquals("Updated Public School", savedEntity.getSchoolName());
+        assertEquals("Amritsar", savedEntity.getCity());
+        assertEquals(currentUser, savedEntity.getCreatedBy()); // createdBy preserved
+        assertEquals(currentUser, savedEntity.getUpdatedBy()); // updatedBy set
+
+        // Verify AuditLog for UPDATE
+        ArgumentCaptor<AuditLog> auditCaptor = ArgumentCaptor.forClass(AuditLog.class);
+        verify(auditLogRepository).save(auditCaptor.capture());
+        AuditLog auditLog = auditCaptor.getValue();
+        assertEquals("School", auditLog.getEntityName());
+        assertEquals(100L, auditLog.getEntityId());
+        assertEquals(AuditAction.UPDATE, auditLog.getAction());
+        assertEquals(AuditStatus.SUCCESS, auditLog.getStatus());
+        assertEquals(currentUser, auditLog.getUser());
+        assertNotNull(auditLog.getOldValue());
+        assertNotNull(auditLog.getNewValue());
+        assertTrue(auditLog.getOldValue().contains("ABC Public School"));
+        assertTrue(auditLog.getNewValue().contains("Updated Public School"));
+    }
+
+    @Test
+    void updateSchool_DuplicateSchoolCode_ThrowsSchoolCodeException() {
+        School existingSchool = SchoolTestDataFactory.createSchoolEntity(currentUser);
+        when(schoolRepository.findById(100L)).thenReturn(Optional.of(existingSchool));
+        when(schoolRepository.existsBySchoolCode("SCH999")).thenReturn(true);
+
+        schoolDTO updateRequest = SchoolTestDataFactory.createValidSchoolDTO();
+        updateRequest.setSchoolCode("SCH999");
+
+        SchoolCodeException ex = assertThrows(
+                SchoolCodeException.class,
+                () -> schoolService.updateSchool(100L, updateRequest, currentUser)
+        );
+
+        assertTrue(ex.getMessage().contains("School code already exists: SCH999"));
+        verify(schoolRepository, never()).save(any());
+        verify(auditLogRepository, never()).save(any());
+    }
+
+    @Test
+    void updateSchool_SameSchoolCode_DoesNotCheckUniqueness() {
+        School existingSchool = SchoolTestDataFactory.createSchoolEntity(currentUser);
+        when(schoolRepository.findById(100L)).thenReturn(Optional.of(existingSchool));
+        when(schoolRepository.save(any(School.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        schoolDTO updateRequest = SchoolTestDataFactory.createValidSchoolDTO();
+        updateRequest.setSchoolCode("SCH001"); // same code
+        updateRequest.setSchoolName("New Name");
+
+        schoolDTO result = schoolService.updateSchool(100L, updateRequest, currentUser);
+
+        assertNotNull(result);
+        assertEquals("New Name", result.getSchoolName());
+        verify(schoolRepository, never()).existsBySchoolCode("SCH001");
+    }
+
+    @Test
+    void updateSchool_NotFound_ThrowsEntityNotFoundException() {
+        when(schoolRepository.findById(999L)).thenReturn(Optional.empty());
+
+        schoolDTO updateRequest = SchoolTestDataFactory.createValidSchoolDTO();
+
+        EntityNotFoundException ex = assertThrows(
+                EntityNotFoundException.class,
+                () -> schoolService.updateSchool(999L, updateRequest, currentUser)
+        );
+
+        assertTrue(ex.getMessage().contains("School not found with id: 999"));
+        verify(schoolRepository, never()).save(any());
+        verify(auditLogRepository, never()).save(any());
+    }
 }

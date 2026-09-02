@@ -61,13 +61,7 @@ public class schoolServiceImpl implements schoolService {
         }
 
         // 2. Resolve authenticated user if not provided directly
-        if (currentUser == null) {
-            Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
-            if (authentication != null && authentication.isAuthenticated() && !"anonymousUser".equals(authentication.getPrincipal())) {
-                String email = authentication.getName();
-                currentUser = userRepository.findByEmail(email).orElse(null);
-            }
-        }
+        currentUser = resolveCurrentUser(currentUser);
 
         // 3. Map request DTO to School entity using ModelMapper & set system attributes
         School school = modelMapper.map(request, School.class);
@@ -91,6 +85,65 @@ public class schoolServiceImpl implements schoolService {
             auditLogRepository.save(auditLog);
         } catch (Exception e) {
             // Do not break school creation transaction if audit serialization fails
+        }
+
+        return responseDto;
+    }
+
+    @Override
+    public schoolDTO updateSchool(Long schoolId, schoolDTO request, User currentUser) {
+        School school = schoolRepository.findById(schoolId)
+                .orElseThrow(() -> new EntityNotFoundException("School not found with id: " + schoolId));
+
+        if (request.getSchoolCode() != null && !request.getSchoolCode().equals(school.getSchoolCode())) {
+            if (schoolRepository.existsBySchoolCode(request.getSchoolCode())) {
+                throw new SchoolCodeException("School code already exists: " + request.getSchoolCode());
+            }
+        }
+
+        currentUser = resolveCurrentUser(currentUser);
+
+        schoolDTO oldDto = toDto(school);
+        String oldValueJson = null;
+        try {
+            oldValueJson = objectMapper.writeValueAsString(oldDto);
+        } catch (Exception e) {
+            // Do not break transaction if old value serialization fails
+        }
+
+        school.setSchoolCode(request.getSchoolCode());
+        school.setSchoolName(request.getSchoolName());
+        school.setPrincipalName(request.getPrincipalName());
+        school.setBoard(request.getBoard());
+        school.setAddress(request.getAddress());
+        school.setCity(request.getCity());
+        school.setDistrict(request.getDistrict());
+        school.setState(request.getState());
+        school.setPincode(request.getPincode());
+        school.setPhone(request.getPhone());
+        school.setEmail(request.getEmail());
+        if (request.getActive() != null) {
+            school.setActive(request.getActive());
+        }
+        school.setUpdatedBy(currentUser);
+
+        School savedSchool = schoolRepository.save(school);
+        schoolDTO responseDto = toDto(savedSchool);
+
+        try {
+            String newValueJson = objectMapper.writeValueAsString(responseDto);
+            AuditLog auditLog = AuditLog.builder()
+                    .user(currentUser)
+                    .entityName("School")
+                    .entityId(savedSchool.getId())
+                    .action(AuditAction.UPDATE)
+                    .status(AuditStatus.SUCCESS)
+                    .oldValue(oldValueJson)
+                    .newValue(newValueJson)
+                    .build();
+            auditLogRepository.save(auditLog);
+        } catch (Exception e) {
+            // Do not break school update transaction if audit serialization fails
         }
 
         return responseDto;
@@ -211,5 +264,16 @@ public class schoolServiceImpl implements schoolService {
             dto.setCreatedByName(school.getCreatedBy().getFullName());
         }
         return dto;
+    }
+
+    private User resolveCurrentUser(User currentUser) {
+        if (currentUser == null) {
+            Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+            if (authentication != null && authentication.isAuthenticated() && !"anonymousUser".equals(authentication.getPrincipal())) {
+                String email = authentication.getName();
+                currentUser = userRepository.findByEmail(email).orElse(null);
+            }
+        }
+        return currentUser;
     }
 }

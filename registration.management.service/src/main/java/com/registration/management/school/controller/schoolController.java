@@ -54,4 +54,14 @@ public class schoolController {
         schoolDTO response = schoolService.createSchool(request, currentUser);
         return ResponseEntity.status(HttpStatus.CREATED).body(response);
     }
+
+    @PutMapping("/{schoolId}")
+    @PreAuthorize("hasAuthority('SCHOOL_UPDATE')")
+    public ResponseEntity<schoolDTO> updateSchool(
+            @PathVariable("schoolId") Long schoolId,
+            @Valid @RequestBody schoolDTO request,
+            @AuthenticationPrincipal User currentUser) {
+        schoolDTO response = schoolService.updateSchool(schoolId, request, currentUser);
+        return ResponseEntity.ok(response);
+    }
 }

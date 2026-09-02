@@ -32,6 +32,7 @@ import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
 @ExtendWith(MockitoExtension.class)
@@ -206,6 +207,50 @@ class SchoolControllerTest {
                 .thenThrow(new jakarta.persistence.EntityNotFoundException("School not found with id: 999"));
 
         mockMvc.perform(get("/api/schools/999"))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.error", is("School not found with id: 999")));
+    }
+
+    @Test
+    void updateSchool_Success() throws Exception {
+        schoolDTO requestDto = SchoolTestDataFactory.createValidSchoolDTO();
+        schoolDTO responseDto = SchoolTestDataFactory.createResponseSchoolDTO();
+        responseDto.setSchoolName("Updated School Name");
+
+        when(schoolService.updateSchool(eq(1L), any(schoolDTO.class), any())).thenReturn(responseDto);
+
+        mockMvc.perform(put("/api/schools/1")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(requestDto)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.id", is(1)))
+                .andExpect(jsonPath("$.schoolName", is("Updated School Name")));
+    }
+
+    @Test
+    void updateSchool_DuplicateSchoolCode_ReturnsBadRequest() throws Exception {
+        schoolDTO requestDto = SchoolTestDataFactory.createValidSchoolDTO();
+
+        when(schoolService.updateSchool(eq(1L), any(schoolDTO.class), any()))
+                .thenThrow(new SchoolCodeException("School code already exists: SCH001"));
+
+        mockMvc.perform(put("/api/schools/1")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(requestDto)))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.error", is("School code already exists: SCH001")));
+    }
+
+    @Test
+    void updateSchool_NotFound_Returns404() throws Exception {
+        schoolDTO requestDto = SchoolTestDataFactory.createValidSchoolDTO();
+
+        when(schoolService.updateSchool(eq(999L), any(schoolDTO.class), any()))
+                .thenThrow(new jakarta.persistence.EntityNotFoundException("School not found with id: 999"));
+
+        mockMvc.perform(put("/api/schools/999")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(requestDto)))
                 .andExpect(status().isNotFound())
                 .andExpect(jsonPath("$.error", is("School not found with id: 999")));
     }

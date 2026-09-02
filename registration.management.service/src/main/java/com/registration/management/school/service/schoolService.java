@@ -10,6 +10,8 @@ public interface schoolService {
 
     schoolDTO getSchoolById(Long schoolId, boolean includeSummary);
 
+    schoolDTO updateSchool(Long schoolId, schoolDTO request, User currentUser);
+
     Page<schoolDTO> getSchools(
             String search,
             String city,
