@@ -1,6 +1,7 @@
 package com.registration.management.school.controller;
 
 import com.registration.management.auth.entities.User;
+import com.registration.management.school.dto.SchoolStatusRequestDTO;
 import com.registration.management.school.dto.schoolDTO;
 import com.registration.management.school.service.schoolService;
 import jakarta.validation.Valid;
@@ -62,6 +63,16 @@ public class schoolController {
             @Valid @RequestBody schoolDTO request,
             @AuthenticationPrincipal User currentUser) {
         schoolDTO response = schoolService.updateSchool(schoolId, request, currentUser);
+        return ResponseEntity.ok(response);
+    }
+
+    @PatchMapping("/{schoolId}/status")
+    @PreAuthorize("hasAuthority('SCHOOL_STATUS_UPDATE')")
+    public ResponseEntity<schoolDTO> updateSchoolStatus(
+            @PathVariable("schoolId") Long schoolId,
+            @Valid @RequestBody SchoolStatusRequestDTO request,
+            @AuthenticationPrincipal User currentUser) {
+        schoolDTO response = schoolService.updateSchoolStatus(schoolId, request.getActive(), currentUser);
         return ResponseEntity.ok(response);
     }
 }

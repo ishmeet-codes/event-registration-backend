@@ -150,6 +150,46 @@ public class schoolServiceImpl implements schoolService {
     }
 
     @Override
+    public schoolDTO updateSchoolStatus(Long schoolId, Boolean active, User currentUser) {
+        School school = schoolRepository.findById(schoolId)
+                .orElseThrow(() -> new EntityNotFoundException("School not found with id: " + schoolId));
+
+        currentUser = resolveCurrentUser(currentUser);
+
+        schoolDTO oldDto = toDto(school);
+        String oldValueJson = null;
+        try {
+            oldValueJson = objectMapper.writeValueAsString(oldDto);
+        } catch (Exception e) {
+            // Do not break transaction if old value serialization fails
+        }
+
+        school.setActive(Boolean.TRUE.equals(active));
+        school.setUpdatedBy(currentUser);
+
+        School savedSchool = schoolRepository.save(school);
+        schoolDTO responseDto = toDto(savedSchool);
+
+        try {
+            String newValueJson = objectMapper.writeValueAsString(responseDto);
+            AuditLog auditLog = AuditLog.builder()
+                    .user(currentUser)
+                    .entityName("School")
+                    .entityId(savedSchool.getId())
+                    .action(AuditAction.UPDATE)
+                    .status(AuditStatus.SUCCESS)
+                    .oldValue(oldValueJson)
+                    .newValue(newValueJson)
+                    .build();
+            auditLogRepository.save(auditLog);
+        } catch (Exception e) {
+            // Do not break school status update transaction if audit serialization fails
+        }
+
+        return responseDto;
+    }
+
+    @Override
     @Transactional(readOnly = true)
     public schoolDTO getSchoolById(Long schoolId, boolean includeSummary) {
         School school = schoolRepository.findById(schoolId)

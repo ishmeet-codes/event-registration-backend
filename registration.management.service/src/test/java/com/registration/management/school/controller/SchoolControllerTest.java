@@ -2,6 +2,7 @@ package com.registration.management.school.controller;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.registration.management.common.exception.GlobalExceptionHandler;
+import com.registration.management.school.dto.SchoolStatusRequestDTO;
 import com.registration.management.school.dto.schoolDTO;
 import com.registration.management.school.exception.SchoolCodeException;
 import com.registration.management.school.service.schoolService;
@@ -31,6 +32,7 @@ import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
@@ -251,6 +253,45 @@ class SchoolControllerTest {
         mockMvc.perform(put("/api/schools/999")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(requestDto)))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.error", is("School not found with id: 999")));
+    }
+
+    @Test
+    void updateSchoolStatus_Success() throws Exception {
+        SchoolStatusRequestDTO statusRequest = new SchoolStatusRequestDTO(false);
+        schoolDTO responseDto = SchoolTestDataFactory.createResponseSchoolDTO();
+        responseDto.setActive(false);
+
+        when(schoolService.updateSchoolStatus(eq(1L), eq(false), any())).thenReturn(responseDto);
+
+        mockMvc.perform(patch("/api/schools/1/status")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(statusRequest)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.id", is(1)))
+                .andExpect(jsonPath("$.active", is(false)));
+    }
+
+    @Test
+    void updateSchoolStatus_ValidationFailure_NullActive() throws Exception {
+        mockMvc.perform(patch("/api/schools/1/status")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{}"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.errors.active", is("Active status is required")));
+    }
+
+    @Test
+    void updateSchoolStatus_NotFound_Returns404() throws Exception {
+        SchoolStatusRequestDTO statusRequest = new SchoolStatusRequestDTO(true);
+
+        when(schoolService.updateSchoolStatus(eq(999L), eq(true), any()))
+                .thenThrow(new jakarta.persistence.EntityNotFoundException("School not found with id: 999"));
+
+        mockMvc.perform(patch("/api/schools/999/status")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(statusRequest)))
                 .andExpect(status().isNotFound())
                 .andExpect(jsonPath("$.error", is("School not found with id: 999")));
     }

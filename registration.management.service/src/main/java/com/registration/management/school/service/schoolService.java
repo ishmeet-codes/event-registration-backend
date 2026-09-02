@@ -12,6 +12,8 @@ public interface schoolService {
 
     schoolDTO updateSchool(Long schoolId, schoolDTO request, User currentUser);
 
+    schoolDTO updateSchoolStatus(Long schoolId, Boolean active, User currentUser);
+
     Page<schoolDTO> getSchools(
             String search,
             String city,
