@@ -15,7 +15,6 @@ import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.BadCredentialsException;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.Authentication;
-import org.springframework.security.core.GrantedAuthority;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -203,7 +202,7 @@ public class AuthServiceImpl implements AuthService {
                 .fullName(user.getFullName())
                 .role(user.getRole() != null ? user.getRole().getRoleCode() : null)
                 .permissions(user.getAuthorities().stream()
-                        .map(GrantedAuthority::getAuthority)
+                        .map(ga -> ga.getAuthority())
                         .filter(a -> !a.startsWith("ROLE_"))
                         .collect(Collectors.toList()))
                 .build();

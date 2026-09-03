@@ -135,4 +135,118 @@ public class EmailServiceImpl implements EmailService {
                 </html>
                 """.formatted(resetLink, resetLink, resetLink);
     }
+
+    // ─── Staff Welcome ────────────────────────────────────────────────────────
+
+    /**
+     * Sends a welcome email to a newly provisioned school-staff account so the
+     * teacher can set their own password before their first login.
+     * Runs asynchronously so the HTTP response is not blocked by SMTP latency.
+     */
+    @Async
+    @Override
+    public void sendStaffWelcomeEmail(String toEmail, String fullName, String setPasswordLink) {
+        try {
+            MimeMessage message = mailSender.createMimeMessage();
+            MimeMessageHelper helper = new MimeMessageHelper(message, true, "UTF-8");
+
+            helper.setFrom(fromAddress);
+            helper.setTo(toEmail);
+            helper.setSubject("Welcome — Set your password to get started");
+            helper.setText(buildWelcomeEmailBody(fullName, setPasswordLink), /* isHtml = */ true);
+
+            mailSender.send(message);
+            log.info("[EmailService] Staff welcome email sent to: " + toEmail);
+
+        } catch (MessagingException e) {
+            log.severe("[EmailService] Failed to send staff welcome email to " + toEmail + ": " + e.getMessage());
+            // Do not propagate — staff record is already saved; teacher can use Forgot Password later
+        }
+    }
+
+    private String buildWelcomeEmailBody(String fullName, String setPasswordLink) {
+        return """
+                <!DOCTYPE html>
+                <html lang="en">
+                <head>
+                  <meta charset="UTF-8">
+                  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+                  <title>Welcome — Set your password</title>
+                </head>
+                <body style="margin:0;padding:0;background:#f4f6f9;font-family:'Segoe UI',Arial,sans-serif;">
+                  <table width="100%%" cellpadding="0" cellspacing="0" style="background:#f4f6f9;padding:40px 0;">
+                    <tr>
+                      <td align="center">
+                        <table width="560" cellpadding="0" cellspacing="0"
+                               style="background:#ffffff;border-radius:12px;
+                                      box-shadow:0 2px 12px rgba(0,0,0,.08);overflow:hidden;">
+                
+                          <!-- Header -->
+                          <tr>
+                            <td style="background:linear-gradient(135deg,#4f46e5 0%%,#7c3aed 100%%);
+                                       padding:36px 40px;text-align:center;">
+                              <h1 style="margin:0;color:#ffffff;font-size:24px;font-weight:700;
+                                         letter-spacing:-0.5px;">
+                                Welcome to the System!
+                              </h1>
+                            </td>
+                          </tr>
+                
+                          <!-- Body -->
+                          <tr>
+                            <td style="padding:40px 40px 24px;">
+                              <p style="margin:0 0 16px;color:#374151;font-size:15px;line-height:1.6;">
+                                Hi <strong>%s</strong>,
+                              </p>
+                              <p style="margin:0 0 24px;color:#374151;font-size:15px;line-height:1.6;">
+                                An account has been created for you as a school staff member.
+                                Click the button below to set your password and activate your account.
+                                This link is valid for <strong>1 hour</strong>.
+                              </p>
+                
+                              <!-- CTA Button -->
+                              <table cellpadding="0" cellspacing="0" width="100%%">
+                                <tr>
+                                  <td align="center" style="padding:8px 0 32px;">
+                                    <a href="%s"
+                                       style="display:inline-block;background:linear-gradient(135deg,#4f46e5 0%%,#7c3aed 100%%);
+                                              color:#ffffff;text-decoration:none;font-size:15px;font-weight:600;
+                                              padding:14px 36px;border-radius:8px;
+                                              letter-spacing:0.3px;">
+                                      Set My Password
+                                    </a>
+                                  </td>
+                                </tr>
+                              </table>
+                
+                              <p style="margin:0 0 8px;color:#6b7280;font-size:13px;line-height:1.6;">
+                                Or copy and paste this URL into your browser:
+                              </p>
+                              <p style="margin:0 0 24px;word-break:break-all;">
+                                <a href="%s" style="color:#4f46e5;font-size:13px;">%s</a>
+                              </p>
+                
+                              <p style="margin:0;color:#6b7280;font-size:13px;line-height:1.6;">
+                                If you believe this email was sent by mistake, please contact your school administrator.
+                              </p>
+                            </td>
+                          </tr>
+                
+                          <!-- Footer -->
+                          <tr>
+                            <td style="background:#f9fafb;padding:20px 40px;border-top:1px solid #e5e7eb;">
+                              <p style="margin:0;color:#9ca3af;font-size:12px;text-align:center;">
+                                &copy; 2026 Registration Management System. All rights reserved.
+                              </p>
+                            </td>
+                          </tr>
+                
+                        </table>
+                      </td>
+                    </tr>
+                  </table>
+                </body>
+                </html>
+                """.formatted(fullName, setPasswordLink, setPasswordLink, setPasswordLink);
+    }
 }

@@ -66,3 +66,11 @@ databaseChangeLog:
   - include:
       file: schema/V017_rebuild_rbac_seed.sql
       relativeToChangelogFile: true
+
+  - include:
+      file: schema/V018_fix_login_teacher_unique_index.sql
+      relativeToChangelogFile: true
+
+  - include:
+      file: schema/V019_update_rbac_roles_permissions.sql
+      relativeToChangelogFile: true

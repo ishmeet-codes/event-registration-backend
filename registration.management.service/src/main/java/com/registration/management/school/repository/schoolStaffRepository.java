@@ -20,4 +20,11 @@ public interface schoolStaffRepository extends JpaRepository<SchoolStaff, Long>,
     boolean existsBySchoolIdAndStaffRoleAndActiveTrue(Long schoolId, StaffRole staffRole);
 
     boolean existsByIdAndSchoolId(Long id, Long schoolId);
+
+    boolean existsByUserIdAndActiveTrue(Long userId);
+
+    boolean existsByUserIdAndStaffRoleAndActiveTrue(Long userId, StaffRole staffRole);
+
+    @org.springframework.data.jpa.repository.Query("SELECT DISTINCT s.school.id FROM SchoolStaff s WHERE s.user.id = :userId AND s.active = true")
+    java.util.List<Long> findSchoolIdsByUserId(@org.springframework.data.repository.query.Param("userId") Long userId);
 }

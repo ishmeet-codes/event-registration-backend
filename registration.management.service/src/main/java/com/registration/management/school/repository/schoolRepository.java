@@ -21,4 +21,9 @@ public interface schoolRepository extends JpaRepository<School, Long>, JpaSpecif
 
     @Query("SELECT COUNT(r) FROM Registration r WHERE r.school.id = :schoolId")
     long countRegistrationsBySchoolId(@Param("schoolId") Long schoolId);
+
+    boolean existsByCreatedById(Long createdById);
+
+    @Query("SELECT s.id FROM School s WHERE s.createdBy.id = :createdById")
+    java.util.List<Long> findSchoolIdsByCreatedById(@Param("createdById") Long createdById);
 }

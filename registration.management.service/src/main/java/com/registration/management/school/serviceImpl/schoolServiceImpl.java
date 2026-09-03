@@ -48,6 +48,9 @@ public class schoolServiceImpl implements schoolService {
     private UserRepository userRepository;
 
     @Autowired
+    private com.registration.management.school.repository.schoolStaffRepository schoolStaffRepository;
+
+    @Autowired
     private AuditLogRepository auditLogRepository;
 
     @Autowired(required = false)
@@ -70,22 +73,53 @@ public class schoolServiceImpl implements schoolService {
         }
 
         // 2. Resolve authenticated user if not provided directly
-        currentUser = resolveCurrentUser(currentUser);
+        final User resolvedUser = resolveCurrentUser(currentUser);
+
+        // Enforce 1-school limit for LOGIN_TEACHER / SCHOOL_STAFF
+        if (resolvedUser != null && resolvedUser.getRole() != null) {
+            String roleCode = resolvedUser.getRole().getRoleCode();
+            if ("LOGIN_TEACHER".equals(roleCode) || "SCHOOL_STAFF".equals(roleCode)) {
+                boolean alreadyCreated = schoolRepository.existsByCreatedById(resolvedUser.getId());
+                boolean alreadyStaff = schoolStaffRepository.existsByUserIdAndActiveTrue(resolvedUser.getId());
+                if (alreadyCreated || alreadyStaff) {
+                    throw new IllegalStateException("A Login Teacher can only create and manage one school.");
+                }
+            }
+        }
 
         // 3. Map request DTO to School entity using ModelMapper & set system attributes
         School school = modelMapper.map(request, School.class);
         school.setSchoolCode(schoolCode);
         school.setActive(true);
-        school.setCreatedBy(currentUser);
+        school.setCreatedBy(resolvedUser);
 
         School savedSchool = schoolRepository.save(school);
+
+        // Auto-link creator as LOGIN_TEACHER if they hold a teacher role
+        if (resolvedUser != null && resolvedUser.getRole() != null) {
+            String roleCode = resolvedUser.getRole().getRoleCode();
+            if ("LOGIN_TEACHER".equals(roleCode) || "SCHOOL_STAFF".equals(roleCode)) {
+                com.registration.management.school.entity.SchoolStaff staff = com.registration.management.school.entity.SchoolStaff.builder()
+                        .school(savedSchool)
+                        .user(resolvedUser)
+                        .fullName(resolvedUser.getFullName())
+                        .email(resolvedUser.getEmail())
+                        .staffRole(com.registration.management.enums.StaffRole.LOGIN_TEACHER)
+                        .phone(request.getPhone())
+                        .active(true)
+                        .createdBy(resolvedUser)
+                        .build();
+                schoolStaffRepository.save(staff);
+            }
+        }
+
         schoolDTO responseDto = toDto(savedSchool);
 
         // 4. Audit CREATE
         try {
             String newValueJson = objectMapper.writeValueAsString(responseDto);
             AuditLog auditLog = AuditLog.builder()
-                    .user(currentUser)
+                    .user(resolvedUser)
                     .entityName("School")
                     .entityId(savedSchool.getId())
                     .action(AuditAction.CREATE)
@@ -113,7 +147,18 @@ public class schoolServiceImpl implements schoolService {
             school.setSchoolCode(newSchoolCode);
         }
 
-        currentUser = resolveCurrentUser(currentUser);
+        final User resolvedUser = resolveCurrentUser(currentUser);
+
+        boolean isSuperOrAdmin = resolvedUser != null && resolvedUser.getRole() != null &&
+                ("SUPER_ADMIN".equals(resolvedUser.getRole().getRoleCode()) || "ADMIN".equals(resolvedUser.getRole().getRoleCode()));
+
+        if (!isSuperOrAdmin) {
+            boolean isCreator = school.getCreatedBy() != null && school.getCreatedBy().getId().equals(resolvedUser.getId());
+            boolean isStaff = schoolStaffRepository.findSchoolIdsByUserId(resolvedUser.getId()).contains(schoolId);
+            if (!isCreator && !isStaff) {
+                throw new org.springframework.security.access.AccessDeniedException("You are only authorized to edit details of your own school.");
+            }
+        }
 
         schoolDTO oldDto = toDto(school);
         String oldValueJson = null;
@@ -165,6 +210,14 @@ public class schoolServiceImpl implements schoolService {
         School school = schoolRepository.findById(schoolId)
                 .orElseThrow(() -> new EntityNotFoundException("School not found with id: " + schoolId));
 
+        final User resolvedUser = resolveCurrentUser(currentUser);
+        boolean isSuperOrAdmin = resolvedUser != null && resolvedUser.getRole() != null &&
+                ("SUPER_ADMIN".equals(resolvedUser.getRole().getRoleCode()) || "ADMIN".equals(resolvedUser.getRole().getRoleCode()));
+
+        if (!isSuperOrAdmin) {
+            throw new org.springframework.security.access.AccessDeniedException("Only Administrators can modify school status.");
+        }
+
         currentUser = resolveCurrentUser(currentUser);
 
         schoolDTO oldDto = toDto(school);
@@ -204,6 +257,14 @@ public class schoolServiceImpl implements schoolService {
     public void deleteSchool(Long schoolId, User currentUser) {
         School school = schoolRepository.findById(schoolId)
                 .orElseThrow(() -> new EntityNotFoundException("School not found with id: " + schoolId));
+
+        final User resolvedUser = resolveCurrentUser(currentUser);
+        boolean isSuperOrAdmin = resolvedUser != null && resolvedUser.getRole() != null &&
+                ("SUPER_ADMIN".equals(resolvedUser.getRole().getRoleCode()) || "ADMIN".equals(resolvedUser.getRole().getRoleCode()));
+
+        if (!isSuperOrAdmin) {
+            throw new org.springframework.security.access.AccessDeniedException("Only Administrators can delete a school.");
+        }
 
         currentUser = resolveCurrentUser(currentUser);
 
@@ -306,6 +367,23 @@ public class schoolServiceImpl implements schoolService {
     ) {
         return (root, query, cb) -> {
             List<Predicate> predicates = new ArrayList<>();
+
+            final User user = resolveCurrentUser(null);
+            if (user != null && user.getRole() != null) {
+                String roleCode = user.getRole().getRoleCode();
+                if ("LOGIN_TEACHER".equals(roleCode) || "SCHOOL_STAFF".equals(roleCode) || "ACCOMPANYING_TEACHER".equals(roleCode)) {
+                    List<Long> staffSchoolIds = schoolStaffRepository.findSchoolIdsByUserId(user.getId());
+                    List<Long> createdSchoolIds = schoolRepository.findSchoolIdsByCreatedById(user.getId());
+                    java.util.Set<Long> allowedSchoolIds = new java.util.HashSet<>(staffSchoolIds);
+                    allowedSchoolIds.addAll(createdSchoolIds);
+
+                    if (allowedSchoolIds.isEmpty()) {
+                        predicates.add(cb.equal(root.get("id"), -1L));
+                    } else {
+                        predicates.add(root.get("id").in(allowedSchoolIds));
+                    }
+                }
+            }
 
             if (active != null) {
                 predicates.add(cb.equal(root.get("active"), active));

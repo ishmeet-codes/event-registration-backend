@@ -3,8 +3,12 @@ package com.registration.management.school.serviceImpl;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.registration.management.audit.entities.AuditLog;
 import com.registration.management.audit.repository.AuditLogRepository;
+import com.registration.management.auth.entities.PasswordResetToken;
 import com.registration.management.auth.entities.User;
+import com.registration.management.auth.repository.PasswordResetTokenRepository;
+import com.registration.management.auth.repository.RoleRepository;
 import com.registration.management.auth.repository.UserRepository;
+import com.registration.management.auth.service.EmailService;
 import com.registration.management.enums.AuditAction;
 import com.registration.management.enums.AuditStatus;
 import com.registration.management.enums.StaffRole;
@@ -21,6 +25,7 @@ import jakarta.persistence.EntityNotFoundException;
 import jakarta.persistence.criteria.Predicate;
 import org.modelmapper.ModelMapper;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
@@ -28,12 +33,15 @@ import org.springframework.data.domain.Sort;
 import org.springframework.data.jpa.domain.Specification;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
+import java.util.UUID;
 
 @Service
 @Transactional
@@ -51,6 +59,21 @@ public class schoolStaffServiceImpl implements schoolStaffService {
 
     @Autowired
     private UserRepository userRepository;
+
+    @Autowired
+    private RoleRepository roleRepository;
+
+    @Autowired
+    private PasswordEncoder passwordEncoder;
+
+    @Autowired
+    private EmailService emailService;
+
+    @Autowired
+    private PasswordResetTokenRepository passwordResetTokenRepository;
+
+    @Value("${app.mail.reset-password-base-url}")
+    private String resetPasswordBaseUrl;
 
     @Autowired
     private AuditLogRepository auditLogRepository;
@@ -77,21 +100,62 @@ public class schoolStaffServiceImpl implements schoolStaffService {
 
         validateRoleCapacityOnCreate(schoolId, role);
 
-        currentUser = resolveCurrentUser(currentUser);
+        final User resolvedUser = resolveCurrentUser(currentUser);
 
         SchoolStaff staff = modelMapper.map(request, SchoolStaff.class);
         staff.setSchool(school);
         staff.setStaffRole(role);
         staff.setActive(true);
-        staff.setCreatedBy(currentUser);
+        staff.setCreatedBy(resolvedUser);
+
+        // Auto-provision User account if email is provided
+        if (request.getEmail() != null && !request.getEmail().isBlank()) {
+            User staffUser = userRepository.findByEmail(request.getEmail()).orElseGet(() -> {
+                com.registration.management.auth.entities.Role userRole = roleRepository
+                        .findByRoleCode(role.name())
+                        .orElseGet(() -> roleRepository.findByRoleCode("SCHOOL_STAFF")
+                        .orElseGet(() -> roleRepository.findByRoleCode("PARTICIPANT").orElse(null)));
+
+                User newUser = User.builder()
+                        .email(request.getEmail())
+                        .password(passwordEncoder.encode(UUID.randomUUID().toString())) // Random locked password
+                        .fullName(request.getFullName())
+                        .active(true)
+                        .role(userRole)
+                        .createdBy(resolvedUser)
+                        .build();
+
+                return userRepository.save(newUser);
+            });
+            
+            staff.setUser(staffUser);
+        }
 
         SchoolStaff savedStaff = schoolStaffRepository.save(staff);
+
+        // Generate token and send welcome email if user was linked
+        if (savedStaff.getUser() != null) {
+            User staffUser = savedStaff.getUser();
+            String token = UUID.randomUUID().toString();
+
+            PasswordResetToken prt = PasswordResetToken.builder()
+                    .user(staffUser)
+                    .token(token)
+                    .expiresAt(LocalDateTime.now().plusHours(1))
+                    .used(false)
+                    .build();
+            passwordResetTokenRepository.save(prt);
+
+            String setPasswordLink = resetPasswordBaseUrl + "/reset-password?token=" + token;
+            emailService.sendStaffWelcomeEmail(staffUser.getEmail(), staffUser.getFullName(), setPasswordLink);
+        }
+
         schoolStaffDTO responseDto = toDto(savedStaff);
 
         try {
             String newValueJson = objectMapper.writeValueAsString(responseDto);
             AuditLog auditLog = AuditLog.builder()
-                    .user(currentUser)
+                    .user(resolvedUser)
                     .entityName("SchoolStaff")
                     .entityId(savedStaff.getId())
                     .action(AuditAction.CREATE)
@@ -158,7 +222,7 @@ public class schoolStaffServiceImpl implements schoolStaffService {
             validateRoleCapacityOnUpdate(schoolId, staffId, newRole);
         }
 
-        currentUser = resolveCurrentUser(currentUser);
+        final User resolvedUser = resolveCurrentUser(currentUser);
 
         schoolStaffDTO oldDto = toDto(staff);
         String oldValueJson = null;
@@ -173,7 +237,7 @@ public class schoolStaffServiceImpl implements schoolStaffService {
         staff.setPhone(request.getPhone());
         staff.setEmail(request.getEmail());
         staff.setStaffRole(newRole);
-        staff.setUpdatedBy(currentUser);
+        staff.setUpdatedBy(resolvedUser);
 
         SchoolStaff savedStaff = schoolStaffRepository.save(staff);
         schoolStaffDTO responseDto = toDto(savedStaff);
@@ -181,7 +245,7 @@ public class schoolStaffServiceImpl implements schoolStaffService {
         try {
             String newValueJson = objectMapper.writeValueAsString(responseDto);
             AuditLog auditLog = AuditLog.builder()
-                    .user(currentUser)
+                    .user(resolvedUser)
                     .entityName("SchoolStaff")
                     .entityId(savedStaff.getId())
                     .action(AuditAction.UPDATE)
@@ -206,11 +270,14 @@ public class schoolStaffServiceImpl implements schoolStaffService {
         SchoolStaff staff = schoolStaffRepository.findByIdAndSchoolId(staffId, schoolId)
                 .orElseThrow(() -> new EntityNotFoundException("Staff not found with id: " + staffId + " for school: " + schoolId));
 
+        final User resolvedUser = resolveCurrentUser(currentUser);
+        boolean isSuperAdmin = resolvedUser != null && resolvedUser.getRole() != null && "SUPER_ADMIN".equals(resolvedUser.getRole().getRoleCode());
+
         boolean newActiveStatus = Boolean.TRUE.equals(active);
 
         if (staff.isActive() && !newActiveStatus) {
             // Deactivating
-            if (staff.getStaffRole() == StaffRole.LOGIN_TEACHER) {
+            if (!isSuperAdmin && staff.getStaffRole() == StaffRole.LOGIN_TEACHER) {
                 long otherActiveLoginTeachers = schoolStaffRepository.countBySchoolIdAndStaffRoleAndActiveTrueAndIdNot(
                         schoolId, StaffRole.LOGIN_TEACHER, staffId);
                 if (otherActiveLoginTeachers == 0) {
@@ -222,8 +289,6 @@ public class schoolStaffServiceImpl implements schoolStaffService {
             validateRoleCapacityOnUpdate(schoolId, staffId, staff.getStaffRole());
         }
 
-        currentUser = resolveCurrentUser(currentUser);
-
         schoolStaffDTO oldDto = toDto(staff);
         String oldValueJson = null;
         try {
@@ -233,7 +298,7 @@ public class schoolStaffServiceImpl implements schoolStaffService {
         }
 
         staff.setActive(newActiveStatus);
-        staff.setUpdatedBy(currentUser);
+        staff.setUpdatedBy(resolvedUser);
 
         SchoolStaff savedStaff = schoolStaffRepository.save(staff);
         schoolStaffDTO responseDto = toDto(savedStaff);
@@ -241,7 +306,7 @@ public class schoolStaffServiceImpl implements schoolStaffService {
         try {
             String newValueJson = objectMapper.writeValueAsString(responseDto);
             AuditLog auditLog = AuditLog.builder()
-                    .user(currentUser)
+                    .user(resolvedUser)
                     .entityName("SchoolStaff")
                     .entityId(savedStaff.getId())
                     .action(AuditAction.UPDATE)
@@ -266,15 +331,16 @@ public class schoolStaffServiceImpl implements schoolStaffService {
         SchoolStaff staff = schoolStaffRepository.findByIdAndSchoolId(staffId, schoolId)
                 .orElseThrow(() -> new EntityNotFoundException("Staff not found with id: " + staffId + " for school: " + schoolId));
 
-        if (staff.isActive() && staff.getStaffRole() == StaffRole.LOGIN_TEACHER) {
+        final User resolvedUser = resolveCurrentUser(currentUser);
+        boolean isSuperAdmin = resolvedUser != null && resolvedUser.getRole() != null && "SUPER_ADMIN".equals(resolvedUser.getRole().getRoleCode());
+
+        if (!isSuperAdmin && staff.isActive() && staff.getStaffRole() == StaffRole.LOGIN_TEACHER) {
             long otherActiveLoginTeachers = schoolStaffRepository.countBySchoolIdAndStaffRoleAndActiveTrueAndIdNot(
                     schoolId, StaffRole.LOGIN_TEACHER, staffId);
             if (otherActiveLoginTeachers == 0) {
                 throw new StaffConflictException("Cannot delete the only active LOGIN_TEACHER for school: " + schoolId);
             }
         }
-
-        currentUser = resolveCurrentUser(currentUser);
 
         schoolStaffDTO oldDto = toDto(staff);
         String oldValueJson = null;
@@ -285,7 +351,7 @@ public class schoolStaffServiceImpl implements schoolStaffService {
         }
 
         staff.setActive(false);
-        staff.setUpdatedBy(currentUser);
+        staff.setUpdatedBy(resolvedUser);
 
         SchoolStaff savedStaff = schoolStaffRepository.save(staff);
         schoolStaffDTO responseDto = toDto(savedStaff);
@@ -293,7 +359,7 @@ public class schoolStaffServiceImpl implements schoolStaffService {
         try {
             String newValueJson = objectMapper.writeValueAsString(responseDto);
             AuditLog auditLog = AuditLog.builder()
-                    .user(currentUser)
+                    .user(resolvedUser)
                     .entityName("SchoolStaff")
                     .entityId(savedStaff.getId())
                     .action(AuditAction.DELETE)
