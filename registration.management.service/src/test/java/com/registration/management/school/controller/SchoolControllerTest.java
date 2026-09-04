@@ -4,7 +4,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.registration.management.common.exception.GlobalExceptionHandler;
 import com.registration.management.school.dto.SchoolStatusRequestDTO;
 import com.registration.management.school.dto.schoolDTO;
-import com.registration.management.school.exception.SchoolCodeException;
+import com.registration.management.common.exception.SchoolCodeException;
 import com.registration.management.school.service.schoolService;
 import com.registration.management.school.util.SchoolTestDataFactory;
 import org.junit.jupiter.api.BeforeEach;

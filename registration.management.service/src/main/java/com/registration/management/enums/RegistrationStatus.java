@@ -3,8 +3,11 @@ package com.registration.management.enums;
 public enum RegistrationStatus {
 
     DRAFT,
+    PENDING,
     SUBMITTED,
     APPROVED,
-    REJECTED
+    REJECTED,
+    CANCELLED,
+    COMPLETED
 
 }

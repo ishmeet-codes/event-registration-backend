@@ -66,6 +66,7 @@ public class SchoolTestDataFactory {
                 .id(10L)
                 .fullName("Test Admin")
                 .email("admin@registration.com")
+                .role(com.registration.management.auth.entities.Role.builder().id(1L).roleCode("ADMIN").roleName("Admin").build())
                 .active(true)
                 .build();
     }

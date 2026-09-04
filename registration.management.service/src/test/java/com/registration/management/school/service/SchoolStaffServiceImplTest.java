@@ -9,9 +9,9 @@ import com.registration.management.enums.StaffRole;
 import com.registration.management.school.dto.schoolStaffDTO;
 import com.registration.management.school.entity.School;
 import com.registration.management.school.entity.SchoolStaff;
-import com.registration.management.school.exception.SchoolNotActiveException;
-import com.registration.management.school.exception.StaffConflictException;
-import com.registration.management.school.exception.StaffRoleNotFoundException;
+import com.registration.management.common.exception.SchoolNotActiveException;
+import com.registration.management.common.exception.StaffConflictException;
+import com.registration.management.common.exception.StaffRoleNotFoundException;
 import com.registration.management.school.repository.schoolRepository;
 import com.registration.management.school.repository.schoolStaffRepository;
 import com.registration.management.school.serviceImpl.schoolStaffServiceImpl;
@@ -55,6 +55,18 @@ class SchoolStaffServiceImplTest {
 
     @Mock
     private AuditLogRepository auditLogRepository;
+
+    @Mock
+    private com.registration.management.auth.repository.RoleRepository roleRepository;
+
+    @Mock
+    private org.springframework.security.crypto.password.PasswordEncoder passwordEncoder;
+
+    @Mock
+    private com.registration.management.auth.service.EmailService emailService;
+
+    @Mock
+    private com.registration.management.auth.repository.PasswordResetTokenRepository passwordResetTokenRepository;
 
     @Spy
     private ObjectMapper objectMapper = new ObjectMapper();

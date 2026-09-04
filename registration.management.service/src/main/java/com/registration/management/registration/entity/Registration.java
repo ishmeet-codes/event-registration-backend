@@ -1,4 +1,4 @@
-package com.registration.management.registration.entities;
+package com.registration.management.registration.entity;
 
 import com.registration.management.auth.entities.User;
 import com.registration.management.enums.RegistrationStatus;

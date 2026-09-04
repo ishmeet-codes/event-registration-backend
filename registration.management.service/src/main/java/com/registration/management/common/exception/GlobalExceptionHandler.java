@@ -1,9 +1,8 @@
 package com.registration.management.common.exception;
 
-import com.registration.management.school.exception.SchoolCodeException;
-import com.registration.management.school.exception.SchoolNotActiveException;
-import com.registration.management.school.exception.StaffConflictException;
-import com.registration.management.school.exception.StaffRoleNotFoundException;
+import com.registration.management.registration.exception.RegistrationConflictException;
+import com.registration.management.registration.exception.RegistrationHasParticipantsException;
+import com.registration.management.registration.exception.RegistrationNotFoundException;
 import jakarta.persistence.EntityNotFoundException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -28,6 +27,26 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(StaffConflictException.class)
     public ResponseEntity<Map<String, String>> handleStaffConflictException(StaffConflictException ex) {
         return ResponseEntity.status(HttpStatus.CONFLICT).body(Map.of("error", ex.getMessage()));
+    }
+
+    @ExceptionHandler(RegistrationHasParticipantsException.class)
+    public ResponseEntity<Map<String, String>> handleRegistrationHasParticipantsException(RegistrationHasParticipantsException ex) {
+        return ResponseEntity.status(HttpStatus.CONFLICT).body(Map.of("error", ex.getMessage()));
+    }
+
+    @ExceptionHandler(RegistrationConflictException.class)
+    public ResponseEntity<Map<String, String>> handleRegistrationConflictException(RegistrationConflictException ex) {
+        return ResponseEntity.status(HttpStatus.CONFLICT).body(Map.of("error", ex.getMessage()));
+    }
+
+    @ExceptionHandler(RegistrationNotFoundException.class)
+    public ResponseEntity<Map<String, String>> handleRegistrationNotFoundException(RegistrationNotFoundException ex) {
+        return ResponseEntity.status(HttpStatus.NOT_FOUND).body(Map.of("error", ex.getMessage()));
+    }
+
+    @ExceptionHandler(ResourceNotFoundException.class)
+    public ResponseEntity<Map<String, String>> handleResourceNotFoundException(ResourceNotFoundException ex) {
+        return ResponseEntity.status(HttpStatus.NOT_FOUND).body(Map.of("error", ex.getMessage()));
     }
 
     @ExceptionHandler(SchoolCodeException.class)

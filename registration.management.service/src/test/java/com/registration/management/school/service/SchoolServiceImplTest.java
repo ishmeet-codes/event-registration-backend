@@ -9,7 +9,7 @@ import com.registration.management.enums.AuditAction;
 import com.registration.management.enums.AuditStatus;
 import com.registration.management.school.dto.schoolDTO;
 import com.registration.management.school.entity.School;
-import com.registration.management.school.exception.SchoolCodeException;
+import com.registration.management.common.exception.SchoolCodeException;
 import com.registration.management.school.repository.schoolRepository;
 import com.registration.management.school.serviceImpl.schoolServiceImpl;
 import com.registration.management.school.util.SchoolTestDataFactory;
@@ -49,6 +49,9 @@ class SchoolServiceImplTest {
 
     @Mock
     private AuditLogRepository auditLogRepository;
+
+    @Mock
+    private com.registration.management.school.repository.schoolStaffRepository schoolStaffRepository;
 
     @Spy
     private ObjectMapper objectMapper = new ObjectMapper();

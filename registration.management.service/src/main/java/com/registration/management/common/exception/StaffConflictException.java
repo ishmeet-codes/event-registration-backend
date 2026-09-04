@@ -1,4 +1,4 @@
-package com.registration.management.school.exception;
+package com.registration.management.common.exception;
 
 public class StaffConflictException extends RuntimeException {
 

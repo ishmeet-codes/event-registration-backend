@@ -1,6 +1,6 @@
 package com.registration.management.auth.entities;
 
-import com.registration.management.registration.entities.Checkin;
+import com.registration.management.registration.entity.Checkin;
 import com.registration.management.school.entity.SchoolStaff;
 
 import jakarta.persistence.*;

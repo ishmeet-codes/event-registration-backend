@@ -1,6 +1,9 @@
 package com.registration.management.school.exception;
 
-import com.registration.management.common.exception.GlobalExceptionHandler;
+import com.registration.management.common.exception.*;
+import com.registration.management.registration.exception.RegistrationConflictException;
+import com.registration.management.registration.exception.RegistrationHasParticipantsException;
+import com.registration.management.registration.exception.RegistrationNotFoundException;
 import jakarta.persistence.EntityNotFoundException;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -54,6 +57,61 @@ class GlobalExceptionHandlerTest {
         assertEquals(HttpStatus.BAD_REQUEST, response.getStatusCode());
         assertNotNull(response.getBody());
         assertEquals("Staff role is required", response.getBody().get("error"));
+    }
+
+    @Test
+    void handleStaffConflictException_ReturnsConflict() {
+        StaffConflictException ex = new StaffConflictException("Staff conflict");
+        ResponseEntity<Map<String, String>> response = exceptionHandler.handleStaffConflictException(ex);
+
+        assertNotNull(response);
+        assertEquals(HttpStatus.CONFLICT, response.getStatusCode());
+        assertNotNull(response.getBody());
+        assertEquals("Staff conflict", response.getBody().get("error"));
+    }
+
+    @Test
+    void handleRegistrationHasParticipantsException_ReturnsConflict() {
+        RegistrationHasParticipantsException ex = new RegistrationHasParticipantsException("Cannot delete registration");
+        ResponseEntity<Map<String, String>> response = exceptionHandler.handleRegistrationHasParticipantsException(ex);
+
+        assertNotNull(response);
+        assertEquals(HttpStatus.CONFLICT, response.getStatusCode());
+        assertNotNull(response.getBody());
+        assertEquals("Cannot delete registration", response.getBody().get("error"));
+    }
+
+    @Test
+    void handleRegistrationConflictException_ReturnsConflict() {
+        RegistrationConflictException ex = new RegistrationConflictException("Registration already exists");
+        ResponseEntity<Map<String, String>> response = exceptionHandler.handleRegistrationConflictException(ex);
+
+        assertNotNull(response);
+        assertEquals(HttpStatus.CONFLICT, response.getStatusCode());
+        assertNotNull(response.getBody());
+        assertEquals("Registration already exists", response.getBody().get("error"));
+    }
+
+    @Test
+    void handleRegistrationNotFoundException_ReturnsNotFound() {
+        RegistrationNotFoundException ex = new RegistrationNotFoundException("Registration not found");
+        ResponseEntity<Map<String, String>> response = exceptionHandler.handleRegistrationNotFoundException(ex);
+
+        assertNotNull(response);
+        assertEquals(HttpStatus.NOT_FOUND, response.getStatusCode());
+        assertNotNull(response.getBody());
+        assertEquals("Registration not found", response.getBody().get("error"));
+    }
+
+    @Test
+    void handleResourceNotFoundException_ReturnsNotFound() {
+        ResourceNotFoundException ex = new ResourceNotFoundException("Resource not found");
+        ResponseEntity<Map<String, String>> response = exceptionHandler.handleResourceNotFoundException(ex);
+
+        assertNotNull(response);
+        assertEquals(HttpStatus.NOT_FOUND, response.getStatusCode());
+        assertNotNull(response.getBody());
+        assertEquals("Resource not found", response.getBody().get("error"));
     }
 
     @Test

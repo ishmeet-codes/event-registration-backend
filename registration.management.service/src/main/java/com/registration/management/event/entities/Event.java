@@ -1,7 +1,8 @@
 package com.registration.management.event.entities;
 
 import com.registration.management.auth.entities.User;
-import com.registration.management.registration.entities.Registration;
+import com.registration.management.registration.entity.Registration;
+
 import jakarta.persistence.*;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Positive;

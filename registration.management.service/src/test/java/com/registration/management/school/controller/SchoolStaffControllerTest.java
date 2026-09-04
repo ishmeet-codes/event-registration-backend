@@ -5,7 +5,7 @@ import com.registration.management.common.exception.GlobalExceptionHandler;
 import com.registration.management.enums.StaffRole;
 import com.registration.management.school.dto.StaffStatusRequestDTO;
 import com.registration.management.school.dto.schoolStaffDTO;
-import com.registration.management.school.exception.StaffConflictException;
+import com.registration.management.common.exception.StaffConflictException;
 import com.registration.management.school.service.schoolStaffService;
 import com.registration.management.school.util.SchoolStaffTestDataFactory;
 import jakarta.persistence.EntityNotFoundException;
