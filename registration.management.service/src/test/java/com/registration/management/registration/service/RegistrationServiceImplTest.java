@@ -1,9 +1,15 @@
 package com.registration.management.registration.service;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
+import com.registration.management.audit.entities.AuditLog;
+import com.registration.management.audit.repository.AuditLogRepository;
 import com.registration.management.auth.entities.User;
 import com.registration.management.auth.repository.UserRepository;
 import com.registration.management.common.exception.ResourceNotFoundException;
 import com.registration.management.common.exception.SchoolNotActiveException;
+import com.registration.management.enums.AuditAction;
+import com.registration.management.enums.AuditStatus;
 import com.registration.management.enums.RegistrationStatus;
 import com.registration.management.event.entities.Event;
 import com.registration.management.event.repository.EventRepository;
@@ -22,6 +28,7 @@ import com.registration.management.school.repository.schoolStaffRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.Spy;
@@ -70,6 +77,12 @@ class RegistrationServiceImplTest {
 
     @Spy
     private ModelMapper modelMapper = new ModelMapper();
+
+    @Mock
+    private AuditLogRepository auditLogRepository;
+
+    @Spy
+    private ObjectMapper objectMapper = new ObjectMapper().registerModule(new JavaTimeModule());
 
     @InjectMocks
     private RegistrationServiceImpl registrationService;
@@ -120,6 +133,16 @@ class RegistrationServiceImplTest {
         assertEquals("ABC Public School", result.getSchool().getSchoolName());
         assertEquals("APEX 2026", result.getEvent().getEventName());
         assertEquals("Rahul Sharma", result.getCreatedByStaff().getFullName());
+
+        ArgumentCaptor<AuditLog> auditCaptor = ArgumentCaptor.forClass(AuditLog.class);
+        verify(auditLogRepository).save(auditCaptor.capture());
+        AuditLog auditLog = auditCaptor.getValue();
+        assertEquals("Registration", auditLog.getEntityName());
+        assertEquals(101L, auditLog.getEntityId());
+        assertEquals(AuditAction.CREATE, auditLog.getAction());
+        assertEquals(AuditStatus.SUCCESS, auditLog.getStatus());
+        assertNull(auditLog.getOldValue());
+        assertNotNull(auditLog.getNewValue());
     }
 
     @Test
@@ -291,6 +314,16 @@ class RegistrationServiceImplTest {
         RegistrationResponseDTO result = registrationService.updateRegistration(101L, request, currentUser);
 
         assertEquals("Updated remarks", result.getRemarks());
+
+        ArgumentCaptor<AuditLog> auditCaptor = ArgumentCaptor.forClass(AuditLog.class);
+        verify(auditLogRepository).save(auditCaptor.capture());
+        AuditLog auditLog = auditCaptor.getValue();
+        assertEquals("Registration", auditLog.getEntityName());
+        assertEquals(101L, auditLog.getEntityId());
+        assertEquals(AuditAction.UPDATE, auditLog.getAction());
+        assertEquals(AuditStatus.SUCCESS, auditLog.getStatus());
+        assertNotNull(auditLog.getOldValue());
+        assertNotNull(auditLog.getNewValue());
     }
 
     @Test
@@ -300,6 +333,7 @@ class RegistrationServiceImplTest {
 
         assertThrows(RegistrationHasParticipantsException.class, () -> registrationService.deleteRegistration(101L, currentUser));
         verify(registrationRepository, never()).delete(any(Registration.class));
+        verify(auditLogRepository, never()).save(any());
     }
 
     @Test
@@ -309,6 +343,42 @@ class RegistrationServiceImplTest {
 
         assertDoesNotThrow(() -> registrationService.deleteRegistration(101L, currentUser));
         verify(registrationRepository, times(1)).delete(registration);
+
+        ArgumentCaptor<AuditLog> auditCaptor = ArgumentCaptor.forClass(AuditLog.class);
+        verify(auditLogRepository).save(auditCaptor.capture());
+        AuditLog auditLog = auditCaptor.getValue();
+        assertEquals("Registration", auditLog.getEntityName());
+        assertEquals(101L, auditLog.getEntityId());
+        assertEquals(AuditAction.DELETE, auditLog.getAction());
+        assertEquals(AuditStatus.SUCCESS, auditLog.getStatus());
+        assertNotNull(auditLog.getOldValue());
+        assertNull(auditLog.getNewValue());
+    }
+
+    @Test
+    void updateRegistrationStatus_shouldUpdateStatusAndAudit() {
+        when(registrationRepository.findById(101L)).thenReturn(Optional.of(registration));
+        when(registrationRepository.save(any(Registration.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        RegistrationStatusUpdateRequestDTO request = RegistrationStatusUpdateRequestDTO.builder()
+                .status(RegistrationStatus.PENDING)
+                .remarks("Moving to pending")
+                .build();
+
+        RegistrationResponseDTO result = registrationService.updateRegistrationStatus(101L, request, currentUser);
+
+        assertEquals(RegistrationStatus.PENDING, result.getStatus());
+        assertEquals("Moving to pending", result.getRemarks());
+
+        ArgumentCaptor<AuditLog> auditCaptor = ArgumentCaptor.forClass(AuditLog.class);
+        verify(auditLogRepository).save(auditCaptor.capture());
+        AuditLog auditLog = auditCaptor.getValue();
+        assertEquals("Registration", auditLog.getEntityName());
+        assertEquals(101L, auditLog.getEntityId());
+        assertEquals(AuditAction.UPDATE, auditLog.getAction());
+        assertEquals(AuditStatus.SUCCESS, auditLog.getStatus());
+        assertNotNull(auditLog.getOldValue());
+        assertNotNull(auditLog.getNewValue());
     }
 
     @Test
@@ -320,6 +390,16 @@ class RegistrationServiceImplTest {
         RegistrationResponseDTO result = registrationService.submitRegistration(101L, null, currentUser);
 
         assertEquals(RegistrationStatus.PENDING, result.getStatus());
+
+        ArgumentCaptor<AuditLog> auditCaptor = ArgumentCaptor.forClass(AuditLog.class);
+        verify(auditLogRepository).save(auditCaptor.capture());
+        AuditLog auditLog = auditCaptor.getValue();
+        assertEquals("Registration", auditLog.getEntityName());
+        assertEquals(101L, auditLog.getEntityId());
+        assertEquals(AuditAction.UPDATE, auditLog.getAction());
+        assertEquals(AuditStatus.SUCCESS, auditLog.getStatus());
+        assertNotNull(auditLog.getOldValue());
+        assertNotNull(auditLog.getNewValue());
     }
 
     @Test
@@ -331,6 +411,16 @@ class RegistrationServiceImplTest {
         RegistrationResponseDTO result = registrationService.approveRegistration(101L, currentUser);
 
         assertEquals(RegistrationStatus.APPROVED, result.getStatus());
+
+        ArgumentCaptor<AuditLog> auditCaptor = ArgumentCaptor.forClass(AuditLog.class);
+        verify(auditLogRepository).save(auditCaptor.capture());
+        AuditLog auditLog = auditCaptor.getValue();
+        assertEquals("Registration", auditLog.getEntityName());
+        assertEquals(101L, auditLog.getEntityId());
+        assertEquals(AuditAction.UPDATE, auditLog.getAction());
+        assertEquals(AuditStatus.SUCCESS, auditLog.getStatus());
+        assertNotNull(auditLog.getOldValue());
+        assertNotNull(auditLog.getNewValue());
     }
 
     @Test
@@ -344,6 +434,16 @@ class RegistrationServiceImplTest {
 
         assertEquals(RegistrationStatus.REJECTED, result.getStatus());
         assertEquals("Incomplete", result.getRemarks());
+
+        ArgumentCaptor<AuditLog> auditCaptor = ArgumentCaptor.forClass(AuditLog.class);
+        verify(auditLogRepository).save(auditCaptor.capture());
+        AuditLog auditLog = auditCaptor.getValue();
+        assertEquals("Registration", auditLog.getEntityName());
+        assertEquals(101L, auditLog.getEntityId());
+        assertEquals(AuditAction.UPDATE, auditLog.getAction());
+        assertEquals(AuditStatus.SUCCESS, auditLog.getStatus());
+        assertNotNull(auditLog.getOldValue());
+        assertNotNull(auditLog.getNewValue());
     }
 
     @Test
@@ -355,6 +455,16 @@ class RegistrationServiceImplTest {
         RegistrationResponseDTO result = registrationService.cancelRegistration(101L, null, currentUser);
 
         assertEquals(RegistrationStatus.CANCELLED, result.getStatus());
+
+        ArgumentCaptor<AuditLog> auditCaptor = ArgumentCaptor.forClass(AuditLog.class);
+        verify(auditLogRepository).save(auditCaptor.capture());
+        AuditLog auditLog = auditCaptor.getValue();
+        assertEquals("Registration", auditLog.getEntityName());
+        assertEquals(101L, auditLog.getEntityId());
+        assertEquals(AuditAction.UPDATE, auditLog.getAction());
+        assertEquals(AuditStatus.SUCCESS, auditLog.getStatus());
+        assertNotNull(auditLog.getOldValue());
+        assertNotNull(auditLog.getNewValue());
     }
 
     @Test

@@ -1,9 +1,15 @@
 package com.registration.management.registration.serviceImpl;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
+import com.registration.management.audit.entities.AuditLog;
+import com.registration.management.audit.repository.AuditLogRepository;
 import com.registration.management.auth.entities.User;
 import com.registration.management.auth.repository.UserRepository;
 import com.registration.management.common.exception.ResourceNotFoundException;
 import com.registration.management.common.exception.SchoolNotActiveException;
+import com.registration.management.enums.AuditAction;
+import com.registration.management.enums.AuditStatus;
 import com.registration.management.enums.RegistrationStatus;
 import com.registration.management.event.entities.Event;
 import com.registration.management.event.repository.EventRepository;
@@ -23,6 +29,7 @@ import com.registration.management.school.repository.schoolStaffRepository;
 import jakarta.persistence.criteria.Predicate;
 import lombok.RequiredArgsConstructor;
 import org.modelmapper.ModelMapper;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
@@ -53,6 +60,10 @@ public class RegistrationServiceImpl implements RegistrationService {
     private final RegistrationStatusValidator statusValidator;
     private final UserRepository userRepository;
     private final ModelMapper modelMapper;
+    private final AuditLogRepository auditLogRepository;
+
+    @Autowired(required = false)
+    private ObjectMapper objectMapper = new ObjectMapper().registerModule(new JavaTimeModule());
 
     @Override
     @Transactional(readOnly = true)
@@ -145,7 +156,10 @@ public class RegistrationServiceImpl implements RegistrationService {
         registration.setUpdatedBy(resolvedUser);
 
         Registration savedRegistration = registrationRepository.save(registration);
-        return toDto(savedRegistration);
+        RegistrationResponseDTO responseDto = toDto(savedRegistration);
+
+        audit(resolvedUser, savedRegistration.getId(), AuditAction.CREATE, null, serialize(responseDto));
+        return responseDto;
     }
 
     @Override
@@ -153,25 +167,37 @@ public class RegistrationServiceImpl implements RegistrationService {
         Registration registration = findRegistration(id);
         final User resolvedUser = resolveCurrentUser(currentUser);
 
+        RegistrationResponseDTO oldDto = toDto(registration);
+        String oldValueJson = serialize(oldDto);
+
         if (request != null && request.getRemarks() != null) {
             registration.setRemarks(request.getRemarks().trim());
         }
         registration.setUpdatedBy(resolvedUser);
 
         Registration updatedRegistration = registrationRepository.save(registration);
-        return toDto(updatedRegistration);
+        RegistrationResponseDTO responseDto = toDto(updatedRegistration);
+
+        audit(resolvedUser, updatedRegistration.getId(), AuditAction.UPDATE, oldValueJson, serialize(responseDto));
+        return responseDto;
     }
 
     @Override
     public void deleteRegistration(Long id, User currentUser) {
         Registration registration = findRegistration(id);
+        final User resolvedUser = resolveCurrentUser(currentUser);
 
         long participantCount = participantRepository.countByRegistrationId(id);
         if (participantCount > 0) {
             throw new RegistrationHasParticipantsException("Cannot delete registration because participants exist for this registration");
         }
 
+        RegistrationResponseDTO oldDto = toDto(registration);
+        String oldValueJson = serialize(oldDto);
+
         registrationRepository.delete(registration);
+
+        audit(resolvedUser, id, AuditAction.DELETE, oldValueJson, null);
     }
 
     @Override
@@ -181,6 +207,9 @@ public class RegistrationServiceImpl implements RegistrationService {
 
         statusValidator.validateTransition(registration.getStatus(), request.getStatus());
 
+        RegistrationResponseDTO oldDto = toDto(registration);
+        String oldValueJson = serialize(oldDto);
+
         registration.setStatus(request.getStatus());
         if (request.getRemarks() != null && !request.getRemarks().isBlank()) {
             registration.setRemarks(request.getRemarks().trim());
@@ -188,7 +217,10 @@ public class RegistrationServiceImpl implements RegistrationService {
         registration.setUpdatedBy(resolvedUser);
 
         Registration updatedRegistration = registrationRepository.save(registration);
-        return toDto(updatedRegistration);
+        RegistrationResponseDTO responseDto = toDto(updatedRegistration);
+
+        audit(resolvedUser, updatedRegistration.getId(), AuditAction.UPDATE, oldValueJson, serialize(responseDto));
+        return responseDto;
     }
 
     @Override
@@ -198,6 +230,9 @@ public class RegistrationServiceImpl implements RegistrationService {
 
         statusValidator.validateTransition(registration.getStatus(), RegistrationStatus.PENDING);
 
+        RegistrationResponseDTO oldDto = toDto(registration);
+        String oldValueJson = serialize(oldDto);
+
         registration.setStatus(RegistrationStatus.PENDING);
         if (request != null && request.getRemarks() != null && !request.getRemarks().isBlank()) {
             registration.setRemarks(request.getRemarks().trim());
@@ -205,7 +240,10 @@ public class RegistrationServiceImpl implements RegistrationService {
         registration.setUpdatedBy(resolvedUser);
 
         Registration updatedRegistration = registrationRepository.save(registration);
-        return toDto(updatedRegistration);
+        RegistrationResponseDTO responseDto = toDto(updatedRegistration);
+
+        audit(resolvedUser, updatedRegistration.getId(), AuditAction.UPDATE, oldValueJson, serialize(responseDto));
+        return responseDto;
     }
 
     @Override
@@ -215,11 +253,17 @@ public class RegistrationServiceImpl implements RegistrationService {
 
         statusValidator.validateTransition(registration.getStatus(), RegistrationStatus.APPROVED);
 
+        RegistrationResponseDTO oldDto = toDto(registration);
+        String oldValueJson = serialize(oldDto);
+
         registration.setStatus(RegistrationStatus.APPROVED);
         registration.setUpdatedBy(resolvedUser);
 
         Registration updatedRegistration = registrationRepository.save(registration);
-        return toDto(updatedRegistration);
+        RegistrationResponseDTO responseDto = toDto(updatedRegistration);
+
+        audit(resolvedUser, updatedRegistration.getId(), AuditAction.UPDATE, oldValueJson, serialize(responseDto));
+        return responseDto;
     }
 
     @Override
@@ -229,6 +273,9 @@ public class RegistrationServiceImpl implements RegistrationService {
 
         statusValidator.validateTransition(registration.getStatus(), RegistrationStatus.REJECTED);
 
+        RegistrationResponseDTO oldDto = toDto(registration);
+        String oldValueJson = serialize(oldDto);
+
         registration.setStatus(RegistrationStatus.REJECTED);
         if (request != null && request.getRemarks() != null && !request.getRemarks().isBlank()) {
             registration.setRemarks(request.getRemarks().trim());
@@ -236,7 +283,10 @@ public class RegistrationServiceImpl implements RegistrationService {
         registration.setUpdatedBy(resolvedUser);
 
         Registration updatedRegistration = registrationRepository.save(registration);
-        return toDto(updatedRegistration);
+        RegistrationResponseDTO responseDto = toDto(updatedRegistration);
+
+        audit(resolvedUser, updatedRegistration.getId(), AuditAction.UPDATE, oldValueJson, serialize(responseDto));
+        return responseDto;
     }
 
     @Override
@@ -246,6 +296,9 @@ public class RegistrationServiceImpl implements RegistrationService {
 
         statusValidator.validateTransition(registration.getStatus(), RegistrationStatus.CANCELLED);
 
+        RegistrationResponseDTO oldDto = toDto(registration);
+        String oldValueJson = serialize(oldDto);
+
         registration.setStatus(RegistrationStatus.CANCELLED);
         if (request != null && request.getRemarks() != null && !request.getRemarks().isBlank()) {
             registration.setRemarks(request.getRemarks().trim());
@@ -253,7 +306,10 @@ public class RegistrationServiceImpl implements RegistrationService {
         registration.setUpdatedBy(resolvedUser);
 
         Registration updatedRegistration = registrationRepository.save(registration);
-        return toDto(updatedRegistration);
+        RegistrationResponseDTO responseDto = toDto(updatedRegistration);
+
+        audit(resolvedUser, updatedRegistration.getId(), AuditAction.UPDATE, oldValueJson, serialize(responseDto));
+        return responseDto;
     }
 
     @Override
@@ -536,5 +592,33 @@ public class RegistrationServiceImpl implements RegistrationService {
                 .createdAt(registration.getCreatedAt())
                 .updatedAt(registration.getUpdatedAt())
                 .build();
+    }
+
+    private void audit(User user, Long entityId, AuditAction action, String oldValueJson, String newValueJson) {
+        try {
+            AuditLog auditLog = AuditLog.builder()
+                    .user(user)
+                    .entityName("Registration")
+                    .entityId(entityId)
+                    .action(action)
+                    .status(AuditStatus.SUCCESS)
+                    .oldValue(oldValueJson)
+                    .newValue(newValueJson)
+                    .build();
+            auditLogRepository.save(auditLog);
+        } catch (Exception e) {
+            // Do not break transaction if audit serialization fails
+        }
+    }
+
+    private String serialize(Object object) {
+        if (object == null) {
+            return null;
+        }
+        try {
+            return objectMapper.writeValueAsString(object);
+        } catch (Exception e) {
+            return null;
+        }
     }
 }
