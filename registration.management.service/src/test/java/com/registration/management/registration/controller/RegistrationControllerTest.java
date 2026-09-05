@@ -137,8 +137,7 @@ class RegistrationControllerTest {
                         .content(objectMapper.writeValueAsString(invalidRequest)))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.errors.schoolId", notNullValue()))
-                .andExpect(jsonPath("$.errors.eventId", notNullValue()))
-                .andExpect(jsonPath("$.errors.createdByStaffId", notNullValue()));
+                .andExpect(jsonPath("$.errors.participants", notNullValue()));
     }
 
     @Test

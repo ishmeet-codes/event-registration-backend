@@ -1,6 +1,5 @@
 package com.registration.management.registration.dto;
 
-import com.registration.management.participant.dto.ParticipantCreateDTO;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotEmpty;
 import jakarta.validation.constraints.NotNull;
@@ -16,16 +15,10 @@ import java.util.List;
 @Builder
 @NoArgsConstructor
 @AllArgsConstructor
-public class RegistrationCreateRequestDTO {
+public class BulkRegistrationRequestDTO {
 
     @NotNull(message = "School ID is required")
     private Long schoolId;
-
-    private Long eventId;
-
-    private List<Long> eventIds;
-
-    private Long createdByStaffId;
 
     @Size(max = 500, message = "Remarks cannot exceed 500 characters")
     private String remarks;
@@ -33,5 +26,10 @@ public class RegistrationCreateRequestDTO {
     @Valid
     @NotNull(message = "Participants list is required")
     @NotEmpty(message = "At least one participant is required")
-    private List<ParticipantCreateDTO> participants;
+    private List<BulkParticipantDTO> participants;
+
+    @Valid
+    @NotNull(message = "Registrations list is required")
+    @NotEmpty(message = "At least one event registration is required")
+    private List<BulkRegistrationItemRequestDTO> registrations;
 }

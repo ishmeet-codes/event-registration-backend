@@ -64,6 +64,16 @@ public class RegistrationController {
         return ResponseEntity.status(HttpStatus.CREATED).body(response);
     }
 
+    @PostMapping("/api/registrations/bulk")
+    @PreAuthorize("hasAuthority('REGISTRATION_CREATE')")
+    public ResponseEntity<BulkRegistrationResponseDTO> createBulkRegistrations(
+            @Valid @RequestBody BulkRegistrationRequestDTO request,
+            @AuthenticationPrincipal User currentUser
+    ) {
+        BulkRegistrationResponseDTO response = registrationService.createBulkRegistrations(request, currentUser);
+        return ResponseEntity.status(HttpStatus.CREATED).body(response);
+    }
+
     @PutMapping("/api/registrations/{id}")
     @PreAuthorize("hasAuthority('REGISTRATION_UPDATE')")
     public ResponseEntity<RegistrationResponseDTO> updateRegistration(

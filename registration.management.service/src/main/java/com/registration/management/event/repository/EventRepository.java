@@ -9,6 +9,6 @@ import org.springframework.data.repository.query.Param;
 public interface EventRepository extends JpaRepository<Event, Long>, JpaSpecificationExecutor<Event> {
     boolean existsByParticipationCategory_Code(String code);
 
-    @Query("select count(r) from Registration r where r.event.id = :eventId")
+    @Query("select count(distinct r) from Registration r join r.registrationEvents re where re.event.id = :eventId")
     long countRegistrations(@Param("eventId") Long eventId);
 }

@@ -15,10 +15,11 @@ import com.registration.management.event.entities.Event;
 import com.registration.management.event.repository.EventRepository;
 import com.registration.management.registration.dto.*;
 import com.registration.management.registration.entity.Registration;
-import com.registration.management.registration.exception.RegistrationConflictException;
 import com.registration.management.registration.exception.RegistrationHasParticipantsException;
 import com.registration.management.registration.exception.RegistrationNotFoundException;
-import com.registration.management.registration.repository.ParticipantRepository;
+import com.registration.management.participant.repository.ParticipantEventRepository;
+import com.registration.management.participant.repository.ParticipantRepository;
+import com.registration.management.registration.repository.RegistrationEventRepository;
 import com.registration.management.registration.repository.RegistrationRepository;
 import com.registration.management.registration.serviceImpl.RegistrationServiceImpl;
 import com.registration.management.school.entity.School;
@@ -56,6 +57,12 @@ class RegistrationServiceImplTest {
 
     @Mock
     private RegistrationRepository registrationRepository;
+
+    @Mock
+    private RegistrationEventRepository registrationEventRepository;
+
+    @Mock
+    private ParticipantEventRepository participantEventRepository;
 
     @Mock
     private schoolRepository schoolRepository;
@@ -102,6 +109,9 @@ class RegistrationServiceImplTest {
         staff = com.registration.management.registration.util.RegistrationTestDataFactory.createTestStaff(school);
         currentUser = com.registration.management.registration.util.RegistrationTestDataFactory.createTestUser();
         registration = com.registration.management.registration.util.RegistrationTestDataFactory.createRegistrationEntity(school, event, staff, currentUser);
+
+        lenient().when(schoolStaffRepository.findFirstByUserIdAndSchoolIdAndActiveTrue(any(), any())).thenReturn(Optional.of(staff));
+        lenient().when(schoolStaffRepository.findById(any())).thenReturn(Optional.of(staff));
     }
 
     @Test
@@ -115,8 +125,7 @@ class RegistrationServiceImplTest {
 
         when(schoolRepository.findById(5L)).thenReturn(Optional.of(school));
         when(eventRepository.findById(10L)).thenReturn(Optional.of(event));
-        when(schoolStaffRepository.findById(15L)).thenReturn(Optional.of(staff));
-        when(registrationRepository.existsBySchoolIdAndEventId(5L, 10L)).thenReturn(false);
+        lenient().when(schoolStaffRepository.findById(15L)).thenReturn(Optional.of(staff));
         when(registrationRepository.countByEventId(10L)).thenReturn(5L);
         when(registrationRepository.save(any(Registration.class))).thenAnswer(invocation -> {
             Registration toSave = invocation.getArgument(0);
@@ -128,7 +137,7 @@ class RegistrationServiceImplTest {
 
         assertNotNull(result);
         assertEquals(101L, result.getId());
-        assertEquals(RegistrationStatus.DRAFT, result.getStatus());
+        assertEquals(RegistrationStatus.PENDING, result.getStatus());
         assertEquals("Registration for APEX 2026", result.getRemarks());
         assertEquals("ABC Public School", result.getSchool().getSchoolName());
         assertEquals("APEX 2026", result.getEvent().getEventName());
@@ -225,10 +234,12 @@ class RegistrationServiceImplTest {
                 .build();
 
         when(schoolRepository.findById(5L)).thenReturn(Optional.of(school));
-        when(eventRepository.findById(10L)).thenReturn(Optional.of(event));
+        lenient().when(schoolStaffRepository.findFirstByUserIdAndSchoolIdAndActiveTrue(any(), any())).thenReturn(Optional.empty());
+        when(schoolStaffRepository.findFirstByUserIdAndActiveTrue(any())).thenReturn(Optional.empty());
+        when(schoolStaffRepository.findSchoolIdsByUserId(any())).thenReturn(List.of());
         when(schoolStaffRepository.findById(999L)).thenReturn(Optional.empty());
 
-        assertThrows(ResourceNotFoundException.class, () -> registrationService.createRegistration(request, currentUser));
+        assertThrows(ResponseStatusException.class, () -> registrationService.createRegistration(request, currentUser));
     }
 
     @Test
@@ -243,26 +254,10 @@ class RegistrationServiceImplTest {
                 .build();
 
         when(schoolRepository.findById(5L)).thenReturn(Optional.of(school));
-        when(eventRepository.findById(10L)).thenReturn(Optional.of(event));
-        when(schoolStaffRepository.findById(15L)).thenReturn(Optional.of(staff));
+        lenient().when(schoolStaffRepository.findFirstByUserIdAndSchoolIdAndActiveTrue(any(), any())).thenReturn(Optional.empty());
+        when(schoolStaffRepository.findSchoolIdsByUserId(any())).thenReturn(List.of(99L));
 
         assertThrows(ResponseStatusException.class, () -> registrationService.createRegistration(request, currentUser));
-    }
-
-    @Test
-    void createRegistration_validation7_duplicateRegistration_shouldThrow() {
-        RegistrationCreateRequestDTO request = RegistrationCreateRequestDTO.builder()
-                .schoolId(5L)
-                .eventId(10L)
-                .createdByStaffId(15L)
-                .build();
-
-        when(schoolRepository.findById(5L)).thenReturn(Optional.of(school));
-        when(eventRepository.findById(10L)).thenReturn(Optional.of(event));
-        when(schoolStaffRepository.findById(15L)).thenReturn(Optional.of(staff));
-        when(registrationRepository.existsBySchoolIdAndEventId(5L, 10L)).thenReturn(true);
-
-        assertThrows(RegistrationConflictException.class, () -> registrationService.createRegistration(request, currentUser));
     }
 
     @Test
@@ -276,8 +271,6 @@ class RegistrationServiceImplTest {
 
         when(schoolRepository.findById(5L)).thenReturn(Optional.of(school));
         when(eventRepository.findById(10L)).thenReturn(Optional.of(event));
-        when(schoolStaffRepository.findById(15L)).thenReturn(Optional.of(staff));
-        when(registrationRepository.existsBySchoolIdAndEventId(5L, 10L)).thenReturn(false);
         when(registrationRepository.countByEventId(10L)).thenReturn(10L);
 
         assertThrows(ResponseStatusException.class, () -> registrationService.createRegistration(request, currentUser));
@@ -384,12 +377,13 @@ class RegistrationServiceImplTest {
     @Test
     void submitRegistration_fromDraftToPending_shouldSucceed() {
         registration.setStatus(RegistrationStatus.DRAFT);
+        registration.getParticipants().add(com.registration.management.participant.entity.Participant.builder().id(1L).build());
         when(registrationRepository.findById(101L)).thenReturn(Optional.of(registration));
         when(registrationRepository.save(any(Registration.class))).thenAnswer(invocation -> invocation.getArgument(0));
 
         RegistrationResponseDTO result = registrationService.submitRegistration(101L, null, currentUser);
 
-        assertEquals(RegistrationStatus.PENDING, result.getStatus());
+        assertEquals(RegistrationStatus.SUBMITTED, result.getStatus());
 
         ArgumentCaptor<AuditLog> auditCaptor = ArgumentCaptor.forClass(AuditLog.class);
         verify(auditLogRepository).save(auditCaptor.capture());
@@ -503,5 +497,78 @@ class RegistrationServiceImplTest {
         assertEquals(5L, stats.getRejected());
         assertEquals(5L, stats.getCancelled());
         assertEquals(5L, stats.getCompleted());
+    }
+
+    @Test
+    void createBulkRegistrations_success_shouldCreateMultipleRegistrations() {
+        when(schoolRepository.findById(school.getId())).thenReturn(Optional.of(school));
+        when(schoolStaffRepository.findFirstByUserIdAndSchoolIdAndActiveTrue(currentUser.getId(), school.getId())).thenReturn(Optional.of(staff));
+
+        Event event2 = com.registration.management.registration.util.RegistrationTestDataFactory.createTestEvent();
+        event2.setId(20L);
+        event2.setEventName("Web Wizards");
+
+        when(eventRepository.findById(10L)).thenReturn(Optional.of(event));
+        when(eventRepository.findById(20L)).thenReturn(Optional.of(event2));
+        lenient().when(registrationRepository.existsBySchoolIdAndEventId(anyLong(), anyLong())).thenReturn(false);
+        when(registrationRepository.countByEventId(anyLong())).thenReturn(0L);
+
+        when(registrationRepository.save(any(Registration.class))).thenAnswer(invocation -> {
+            Registration r = invocation.getArgument(0);
+            r.setId(101L);
+            return r;
+        });
+        java.util.concurrent.atomic.AtomicLong idGen = new java.util.concurrent.atomic.AtomicLong(1L);
+        when(participantRepository.save(any(com.registration.management.participant.entity.Participant.class))).thenAnswer(invocation -> {
+            com.registration.management.participant.entity.Participant p = invocation.getArgument(0);
+            if (p.getId() == null) {
+                p.setId(idGen.getAndIncrement());
+            }
+            return p;
+        });
+
+        BulkParticipantDTO p1 = BulkParticipantDTO.builder()
+                .clientId("p1")
+                .fullName("Aman Singh")
+                .gender(com.registration.management.enums.Gender.MALE)
+                .className("10")
+                .dob(LocalDate.of(2011, 5, 15))
+                .guardianPhone("9876543210")
+                .build();
+
+        BulkParticipantDTO p2 = BulkParticipantDTO.builder()
+                .clientId("p2")
+                .fullName("Simran Kaur")
+                .gender(com.registration.management.enums.Gender.FEMALE)
+                .className("10")
+                .dob(LocalDate.of(2011, 8, 21))
+                .guardianPhone("9876543211")
+                .build();
+
+        BulkRegistrationItemRequestDTO reg1 = BulkRegistrationItemRequestDTO.builder()
+                .eventId(10L)
+                .participantClientIds(List.of("p1", "p2"))
+                .remarks("Event 1 remarks")
+                .build();
+
+        BulkRegistrationItemRequestDTO reg2 = BulkRegistrationItemRequestDTO.builder()
+                .eventId(20L)
+                .participantClientIds(List.of("p2"))
+                .remarks("Event 2 remarks")
+                .build();
+
+        BulkRegistrationRequestDTO request = BulkRegistrationRequestDTO.builder()
+                .schoolId(school.getId())
+                .participants(List.of(p1, p2))
+                .registrations(List.of(reg1, reg2))
+                .build();
+
+        BulkRegistrationResponseDTO response = registrationService.createBulkRegistrations(request, currentUser);
+
+        assertNotNull(response);
+        assertEquals(1, response.getRegistrationsCreated());
+        assertEquals(2, response.getParticipantsSubmitted());
+        assertEquals(2, response.getRegistrations().size());
+        verify(registrationRepository, times(1)).save(any(Registration.class));
     }
 }

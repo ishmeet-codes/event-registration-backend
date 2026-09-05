@@ -27,4 +27,8 @@ public interface schoolStaffRepository extends JpaRepository<SchoolStaff, Long>,
 
     @org.springframework.data.jpa.repository.Query("SELECT DISTINCT s.school.id FROM SchoolStaff s WHERE s.user.id = :userId AND s.active = true")
     java.util.List<Long> findSchoolIdsByUserId(@org.springframework.data.repository.query.Param("userId") Long userId);
+
+    Optional<SchoolStaff> findFirstByUserIdAndActiveTrue(Long userId);
+
+    Optional<SchoolStaff> findFirstByUserIdAndSchoolIdAndActiveTrue(Long userId, Long schoolId);
 }

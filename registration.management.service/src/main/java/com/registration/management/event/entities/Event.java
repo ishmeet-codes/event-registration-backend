@@ -1,11 +1,12 @@
 package com.registration.management.event.entities;
 
 import com.registration.management.auth.entities.User;
-import com.registration.management.registration.entity.Registration;
-
+import com.registration.management.registration.entity.RegistrationEvent;
 import jakarta.persistence.*;
+import jakarta.validation.constraints.Future;
+import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotBlank;
-import jakarta.validation.constraints.Positive;
+import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
 import lombok.*;
 import org.hibernate.annotations.CreationTimestamp;
@@ -27,7 +28,7 @@ import java.util.Set;
         "participationCategory",
         "createdBy",
         "updatedBy",
-        "registrations"
+        "registrationEvents"
 })
 @Entity
 @Table(name = "events")
@@ -38,11 +39,10 @@ public class Event {
     @EqualsAndHashCode.Include
     private Long id;
 
-    @ManyToOne(fetch = FetchType.LAZY, optional = false)
+    @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(
             name = "participation_category_code",
             referencedColumnName = "code",
-            nullable = false,
             foreignKey = @ForeignKey(name = "fk_events_participation_category")
     )
     private ParticipationCategory participationCategory;
@@ -52,28 +52,32 @@ public class Event {
     @Column(name = "event_name", nullable = false, length = 150)
     private String eventName;
 
-    @Column(name = "description", columnDefinition = "TEXT")
+    @Size(max = 1000)
+    @Column(name = "description", length = 1000)
     private String description;
 
-    @Size(max = 120)
-    @Column(name = "venue", length = 120)
+    @Size(max = 200)
+    @Column(name = "venue", length = 200)
     private String venue;
 
+    @NotNull
+    @Future
     @Column(name = "registration_deadline", nullable = false)
     private LocalDateTime registrationDeadline;
 
+    @NotNull
     @Column(name = "event_date", nullable = false)
     private LocalDate eventDate;
 
-    @Column(name = "start_time", nullable = false)
+    @Column(name = "start_time")
     private LocalTime startTime;
 
-    @Column(name = "end_time", nullable = false)
+    @Column(name = "end_time")
     private LocalTime endTime;
 
-    @Positive
+    @Min(1)
     @Column(name = "max_registrations", nullable = false)
-    private Integer maxRegistrations;
+    private int maxRegistrations;
 
     @Column(name = "active", nullable = false)
     private boolean active;
@@ -94,7 +98,7 @@ public class Event {
 
     @OneToMany(mappedBy = "event", fetch = FetchType.LAZY)
     @Builder.Default
-    private Set<Registration> registrations = new HashSet<>();
+    private Set<RegistrationEvent> registrationEvents = new HashSet<>();
 
     @CreationTimestamp
     @Column(name = "created_at", nullable = false, updatable = false)
@@ -103,14 +107,4 @@ public class Event {
     @UpdateTimestamp
     @Column(name = "updated_at")
     private LocalDateTime updatedAt;
-
-    public void addRegistration(Registration registration) {
-        registrations.add(registration);
-        registration.setEvent(this);
-    }
-
-    public void removeRegistration(Registration registration) {
-        registrations.remove(registration);
-        registration.setEvent(null);
-    }
 }

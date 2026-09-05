@@ -1,13 +1,15 @@
-package com.registration.management.registration.dto;
+package com.registration.management.participant.dto;
 
 import com.fasterxml.jackson.annotation.JsonInclude;
-import com.registration.management.enums.RegistrationStatus;
-import com.registration.management.participant.dto.ParticipantResponseDTO;
+import com.registration.management.enums.Gender;
+import com.registration.management.registration.dto.EventSummaryDTO;
+import com.registration.management.registration.dto.SchoolSummaryDTO;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.List;
 
@@ -16,18 +18,18 @@ import java.util.List;
 @NoArgsConstructor
 @AllArgsConstructor
 @JsonInclude(JsonInclude.Include.NON_NULL)
-public class RegistrationResponseDTO {
+public class ParticipantResponseDTO {
 
     private Long id;
+    private Long registrationId;
+    private String fullName;
+    private Gender gender;
+    private String className;
+    private LocalDate dob;
+    private String guardianPhone;
     private SchoolSummaryDTO school;
     private EventSummaryDTO event;
     private List<EventSummaryDTO> events;
-    private StaffSummaryDTO createdByStaff;
-    private RegistrationStatus status;
-    private String remarks;
-    private Long eventCount;
-    private Long participantCount;
-    private List<ParticipantResponseDTO> participants;
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;
 }

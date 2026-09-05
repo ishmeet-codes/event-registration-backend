@@ -29,6 +29,8 @@ public interface RegistrationService {
 
     RegistrationResponseDTO createRegistration(RegistrationCreateRequestDTO request, User currentUser);
 
+    BulkRegistrationResponseDTO createBulkRegistrations(BulkRegistrationRequestDTO request, User currentUser);
+
     RegistrationResponseDTO updateRegistration(Long id, RegistrationUpdateRequestDTO request, User currentUser);
 
     void deleteRegistration(Long id, User currentUser);

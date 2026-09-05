@@ -44,6 +44,21 @@ public class GlobalExceptionHandler {
         return ResponseEntity.status(HttpStatus.NOT_FOUND).body(Map.of("error", ex.getMessage()));
     }
 
+    @ExceptionHandler(com.registration.management.participant.exception.ParticipantNotFoundException.class)
+    public ResponseEntity<Map<String, String>> handleParticipantNotFoundException(com.registration.management.participant.exception.ParticipantNotFoundException ex) {
+        return ResponseEntity.status(HttpStatus.NOT_FOUND).body(Map.of("error", ex.getMessage()));
+    }
+
+    @ExceptionHandler(com.registration.management.participant.exception.ParticipantLimitExceededException.class)
+    public ResponseEntity<Map<String, String>> handleParticipantLimitExceededException(com.registration.management.participant.exception.ParticipantLimitExceededException ex) {
+        return ResponseEntity.status(HttpStatus.CONFLICT).body(Map.of("error", ex.getMessage()));
+    }
+
+    @ExceptionHandler(com.registration.management.participant.exception.ParticipantHasCheckinRecordsException.class)
+    public ResponseEntity<Map<String, String>> handleParticipantHasCheckinRecordsException(com.registration.management.participant.exception.ParticipantHasCheckinRecordsException ex) {
+        return ResponseEntity.status(HttpStatus.CONFLICT).body(Map.of("error", ex.getMessage()));
+    }
+
     @ExceptionHandler(ResourceNotFoundException.class)
     public ResponseEntity<Map<String, String>> handleResourceNotFoundException(ResourceNotFoundException ex) {
         return ResponseEntity.status(HttpStatus.NOT_FOUND).body(Map.of("error", ex.getMessage()));

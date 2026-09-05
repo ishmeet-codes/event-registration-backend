@@ -2,8 +2,10 @@ package com.registration.management.registration.util;
 
 import com.registration.management.auth.entities.Role;
 import com.registration.management.auth.entities.User;
+import com.registration.management.enums.Gender;
 import com.registration.management.enums.RegistrationStatus;
 import com.registration.management.event.entities.Event;
+import com.registration.management.participant.dto.ParticipantCreateDTO;
 import com.registration.management.registration.dto.*;
 import com.registration.management.registration.entity.Registration;
 import com.registration.management.school.entity.School;
@@ -11,6 +13,7 @@ import com.registration.management.school.entity.SchoolStaff;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.util.List;
 
 public class RegistrationTestDataFactory {
 
@@ -20,6 +23,15 @@ public class RegistrationTestDataFactory {
                 .eventId(10L)
                 .createdByStaffId(15L)
                 .remarks("Registration for APEX 2026")
+                .participants(List.of(
+                        ParticipantCreateDTO.builder()
+                                .fullName("Aman Singh")
+                                .gender(Gender.MALE)
+                                .className("10th")
+                                .dob(LocalDate.of(2010, 5, 12))
+                                .guardianPhone("9876543210")
+                                .build()
+                ))
                 .build();
     }
 
@@ -91,10 +103,9 @@ public class RegistrationTestDataFactory {
     }
 
     public static Registration createRegistrationEntity(School school, Event event, SchoolStaff staff, User user) {
-        return Registration.builder()
+        Registration reg = Registration.builder()
                 .id(101L)
                 .school(school)
-                .event(event)
                 .createdByStaff(staff)
                 .status(RegistrationStatus.DRAFT)
                 .remarks("Initial registration")
@@ -103,5 +114,9 @@ public class RegistrationTestDataFactory {
                 .createdAt(LocalDateTime.now())
                 .updatedAt(LocalDateTime.now())
                 .build();
+        if (event != null) {
+            reg.addEvent(event);
+        }
+        return reg;
     }
 }

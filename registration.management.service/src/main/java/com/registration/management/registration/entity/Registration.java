@@ -5,6 +5,7 @@ import com.registration.management.enums.RegistrationStatus;
 import com.registration.management.event.entities.Event;
 import com.registration.management.school.entity.School;
 import com.registration.management.school.entity.SchoolStaff;
+import com.registration.management.participant.entity.Participant;
 
 import jakarta.persistence.*;
 import jakarta.validation.constraints.Size;
@@ -26,25 +27,14 @@ import java.util.Set;
 @EqualsAndHashCode(onlyExplicitlyIncluded = true)
 @ToString(exclude = {
         "school",
-        "event",
         "createdByStaff",
         "createdBy",
         "updatedBy",
+        "registrationEvents",
         "participants"
 })
 @Entity
-@Table(
-        name = "registrations",
-        uniqueConstraints = {
-                @UniqueConstraint(
-                        name = "uq_registration_school_event",
-                        columnNames = {
-                                "school_id",
-                                "event_id"
-                        }
-                )
-        }
-)
+@Table(name = "registrations")
 public class Registration {
 
     @Id
@@ -59,14 +49,6 @@ public class Registration {
             foreignKey = @ForeignKey(name = "fk_registrations_school")
     )
     private School school;
-
-    @ManyToOne(fetch = FetchType.LAZY, optional = false)
-    @JoinColumn(
-            name = "event_id",
-            nullable = false,
-            foreignKey = @ForeignKey(name = "fk_registrations_event")
-    )
-    private Event event;
 
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
     @JoinColumn(
@@ -101,6 +83,17 @@ public class Registration {
 
     @OneToMany(
             mappedBy = "registration",
+            cascade = CascadeType.ALL,
+            orphanRemoval = true,
+            fetch = FetchType.LAZY
+    )
+    @Builder.Default
+    private Set<RegistrationEvent> registrationEvents = new HashSet<>();
+
+    @OneToMany(
+            mappedBy = "registration",
+            cascade = CascadeType.ALL,
+            orphanRemoval = true,
             fetch = FetchType.LAZY
     )
     @Builder.Default
@@ -113,6 +106,14 @@ public class Registration {
     @UpdateTimestamp
     @Column(name = "updated_at")
     private LocalDateTime updatedAt;
+
+    public void addEvent(Event event) {
+        RegistrationEvent re = RegistrationEvent.builder()
+                .registration(this)
+                .event(event)
+                .build();
+        registrationEvents.add(re);
+    }
 
     public void addParticipant(Participant participant) {
         participants.add(participant);

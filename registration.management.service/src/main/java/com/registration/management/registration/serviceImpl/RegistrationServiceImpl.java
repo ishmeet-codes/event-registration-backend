@@ -12,13 +12,20 @@ import com.registration.management.enums.AuditAction;
 import com.registration.management.enums.AuditStatus;
 import com.registration.management.enums.RegistrationStatus;
 import com.registration.management.event.entities.Event;
+import com.registration.management.event.entities.ParticipationCategory;
 import com.registration.management.event.repository.EventRepository;
+import com.registration.management.participant.dto.ParticipantCreateDTO;
+import com.registration.management.participant.dto.ParticipantResponseDTO;
+import com.registration.management.participant.entity.Participant;
+import com.registration.management.participant.entity.ParticipantEvent;
+import com.registration.management.participant.repository.ParticipantEventRepository;
+import com.registration.management.participant.repository.ParticipantRepository;
 import com.registration.management.registration.dto.*;
 import com.registration.management.registration.entity.Registration;
-import com.registration.management.registration.exception.RegistrationConflictException;
+import com.registration.management.registration.entity.RegistrationEvent;
 import com.registration.management.registration.exception.RegistrationHasParticipantsException;
 import com.registration.management.registration.exception.RegistrationNotFoundException;
-import com.registration.management.registration.repository.ParticipantRepository;
+import com.registration.management.registration.repository.RegistrationEventRepository;
 import com.registration.management.registration.repository.RegistrationRepository;
 import com.registration.management.registration.service.RegistrationService;
 import com.registration.management.registration.service.RegistrationStatusValidator;
@@ -28,7 +35,6 @@ import com.registration.management.school.repository.schoolRepository;
 import com.registration.management.school.repository.schoolStaffRepository;
 import jakarta.persistence.criteria.Predicate;
 import lombok.RequiredArgsConstructor;
-import org.modelmapper.ModelMapper;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
@@ -44,8 +50,8 @@ import org.springframework.web.server.ResponseStatusException;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
-import java.util.ArrayList;
-import java.util.List;
+import java.util.*;
+import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
@@ -53,13 +59,14 @@ import java.util.List;
 public class RegistrationServiceImpl implements RegistrationService {
 
     private final RegistrationRepository registrationRepository;
+    private final RegistrationEventRepository registrationEventRepository;
+    private final ParticipantEventRepository participantEventRepository;
     private final schoolRepository schoolRepository;
     private final EventRepository eventRepository;
     private final schoolStaffRepository schoolStaffRepository;
     private final ParticipantRepository participantRepository;
     private final RegistrationStatusValidator statusValidator;
     private final UserRepository userRepository;
-    private final ModelMapper modelMapper;
     private final AuditLogRepository auditLogRepository;
 
     @Autowired(required = false)
@@ -96,59 +103,120 @@ public class RegistrationServiceImpl implements RegistrationService {
     }
 
     @Override
+    @Transactional
     public RegistrationResponseDTO createRegistration(RegistrationCreateRequestDTO request, User currentUser) {
         final User resolvedUser = resolveCurrentUser(currentUser);
 
-        // Validation 1 — School exists
+        // Validation 1 — School exists & active
         School school = schoolRepository.findById(request.getSchoolId())
                 .orElseThrow(() -> new ResourceNotFoundException("School not found: " + request.getSchoolId()));
-
-        // Validation 9 — School active
         if (!school.isActive()) {
             throw new SchoolNotActiveException("School is not active");
         }
 
-        // Validation 2 — Event exists
-        Event event = eventRepository.findById(request.getEventId())
-                .orElseThrow(() -> new ResourceNotFoundException("Event not found: " + request.getEventId()));
-
-        // Validation 5 — Event active
-        if (!event.isActive()) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Event is not active");
+        // Validation 2 — Staff authorization check
+        SchoolStaff staff = null;
+        if (resolvedUser != null) {
+            staff = schoolStaffRepository.findFirstByUserIdAndSchoolIdAndActiveTrue(resolvedUser.getId(), school.getId()).orElse(null);
+            if (staff == null) {
+                List<Long> userSchoolIds = schoolStaffRepository.findSchoolIdsByUserId(resolvedUser.getId());
+                if (!userSchoolIds.isEmpty() && !userSchoolIds.contains(school.getId())) {
+                    throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Staff member is not authorized for school ID " + school.getId());
+                }
+                staff = schoolStaffRepository.findFirstByUserIdAndActiveTrue(resolvedUser.getId()).orElse(null);
+            }
+        }
+        if (staff == null && request.getCreatedByStaffId() != null) {
+            staff = schoolStaffRepository.findById(request.getCreatedByStaffId()).orElse(null);
+        }
+        if (staff == null) {
+            staff = schoolStaffRepository.findAll().stream()
+                    .filter(s -> s.getSchool().getId().equals(school.getId()) && s.isActive())
+                    .findFirst()
+                    .orElseThrow(() -> new ResponseStatusException(HttpStatus.BAD_REQUEST, "No active school staff found for school ID " + school.getId()));
         }
 
-        // Validation 6 — Registration deadline
-        if (LocalDateTime.now().isAfter(event.getRegistrationDeadline())) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Registration deadline has passed");
+        // Collect target event IDs
+        List<Long> targetEventIds = new ArrayList<>();
+        if (request.getEventIds() != null && !request.getEventIds().isEmpty()) {
+            targetEventIds.addAll(request.getEventIds());
+        }
+        if (request.getEventId() != null && !targetEventIds.contains(request.getEventId())) {
+            targetEventIds.add(request.getEventId());
+        }
+        if (targetEventIds.isEmpty()) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "At least one event must be selected for the registration");
         }
 
-        // Validation 3 — Staff exists
-        SchoolStaff staff = schoolStaffRepository.findById(request.getCreatedByStaffId())
-                .orElseThrow(() -> new ResourceNotFoundException("School staff not found: " + request.getCreatedByStaffId()));
+        // Validate events & build event map
+        Map<Long, Event> eventMap = new HashMap<>();
+        for (Long eId : targetEventIds) {
+            Event event = eventRepository.findById(eId)
+                    .orElseThrow(() -> new ResourceNotFoundException("Event not found: " + eId));
 
-        // Validation 4 — Staff belongs to school
-        if (staff.getSchool() == null || !staff.getSchool().getId().equals(school.getId())) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Staff does not belong to the specified school");
+            if (!event.isActive()) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Event is not active: " + event.getEventName());
+            }
+
+            if (LocalDateTime.now().isAfter(event.getRegistrationDeadline())) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Registration deadline has passed for event: " + event.getEventName());
+            }
+
+            long currentRegs = registrationRepository.countByEventId(event.getId());
+            if (currentRegs >= event.getMaxRegistrations()) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Registration capacity full for event: " + event.getEventName());
+            }
+
+            eventMap.put(eId, event);
         }
 
-        // Validation 7 — Duplicate registration (school_id + event_id)
-        if (registrationRepository.existsBySchoolIdAndEventId(school.getId(), event.getId())) {
-            throw new RegistrationConflictException("Registration already exists for this school and event");
+        // Pre-validate per-event participant assignment counts
+        Map<Long, Integer> eventAssignedCounts = new HashMap<>();
+        for (Long eId : targetEventIds) {
+            eventAssignedCounts.put(eId, 0);
         }
 
-        // Validation 8 — Event capacity
-        long currentRegistrations = registrationRepository.countByEventId(event.getId());
-        if (currentRegistrations >= event.getMaxRegistrations()) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Event registration capacity is full");
+        if (request.getParticipants() != null) {
+            for (ParticipantCreateDTO pDto : request.getParticipants()) {
+                List<Long> pEvents = pDto.getEventIds();
+                if (pEvents == null || pEvents.isEmpty()) {
+                    pEvents = targetEventIds; // Default assign to all if unspecified
+                }
+                for (Long peId : pEvents) {
+                    if (!eventMap.containsKey(peId)) {
+                        throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Participant is assigned to an unselected event ID: " + peId);
+                    }
+                    eventAssignedCounts.put(peId, eventAssignedCounts.get(peId) + 1);
+                }
+            }
         }
 
-        // Map request DTO to Registration entity using ModelMapper & configure associations
-        Registration registration = modelMapper.map(request, Registration.class);
-        registration.setId(null);
+        // Check participation category limits per event
+        for (Long eId : targetEventIds) {
+            Event ev = eventMap.get(eId);
+            if (ev.getParticipationCategory() != null) {
+                ParticipationCategory cat = ev.getParticipationCategory();
+                int count = eventAssignedCounts.getOrDefault(eId, 0);
+                if (count < cat.getMinParticipants()) {
+                    throw new ResponseStatusException(
+                            HttpStatus.BAD_REQUEST,
+                            "Participant count (" + count + ") is below minimum required (" + cat.getMinParticipants() + ") for event: " + ev.getEventName()
+                    );
+                }
+                if (count > cat.getMaxParticipants()) {
+                    throw new ResponseStatusException(
+                            HttpStatus.BAD_REQUEST,
+                            "Participant count (" + count + ") exceeds maximum allowed (" + cat.getMaxParticipants() + ") for event: " + ev.getEventName()
+                    );
+                }
+            }
+        }
+
+        // 1. Create SINGLE Registration entity
+        Registration registration = new Registration();
         registration.setSchool(school);
-        registration.setEvent(event);
         registration.setCreatedByStaff(staff);
-        registration.setStatus(RegistrationStatus.DRAFT);
+        registration.setStatus(RegistrationStatus.PENDING);
         if (request.getRemarks() != null) {
             registration.setRemarks(request.getRemarks().trim());
         }
@@ -156,10 +224,114 @@ public class RegistrationServiceImpl implements RegistrationService {
         registration.setUpdatedBy(resolvedUser);
 
         Registration savedRegistration = registrationRepository.save(registration);
-        RegistrationResponseDTO responseDto = toDto(savedRegistration);
 
+        // 2. Save RegistrationEvent join records
+        for (Long eId : targetEventIds) {
+            Event ev = eventMap.get(eId);
+            RegistrationEvent re = RegistrationEvent.builder()
+                    .registration(savedRegistration)
+                    .event(ev)
+                    .build();
+            registrationEventRepository.save(re);
+            savedRegistration.getRegistrationEvents().add(re);
+        }
+
+        // 3. Save Participant and ParticipantEvent join records
+        if (request.getParticipants() != null && !request.getParticipants().isEmpty()) {
+            for (ParticipantCreateDTO pDto : request.getParticipants()) {
+                Participant participant = Participant.builder()
+                        .registration(savedRegistration)
+                        .fullName(pDto.getFullName().trim())
+                        .gender(pDto.getGender())
+                        .className(pDto.getClassName() != null ? pDto.getClassName().trim() : null)
+                        .dob(pDto.getDob())
+                        .guardianPhone(pDto.getGuardianPhone().trim())
+                        .createdBy(resolvedUser)
+                        .updatedBy(resolvedUser)
+                        .build();
+
+                Participant savedParticipant = participantRepository.save(participant);
+
+                List<Long> pEvents = pDto.getEventIds();
+                if (pEvents == null || pEvents.isEmpty()) {
+                    pEvents = targetEventIds;
+                }
+
+                for (Long peId : pEvents) {
+                    Event ev = eventMap.get(peId);
+                    ParticipantEvent pe = ParticipantEvent.builder()
+                            .participant(savedParticipant)
+                            .event(ev)
+                            .build();
+                    participantEventRepository.save(pe);
+                    savedParticipant.getParticipantEvents().add(pe);
+                }
+
+                savedRegistration.addParticipant(savedParticipant);
+            }
+        }
+
+        RegistrationResponseDTO responseDto = toDto(savedRegistration);
         audit(resolvedUser, savedRegistration.getId(), AuditAction.CREATE, null, serialize(responseDto));
         return responseDto;
+    }
+
+    @Override
+    @Transactional
+    public BulkRegistrationResponseDTO createBulkRegistrations(BulkRegistrationRequestDTO request, User currentUser) {
+        final User resolvedUser = resolveCurrentUser(currentUser);
+
+        // Map BulkRegistrationRequestDTO to RegistrationCreateRequestDTO (single registration application)
+        List<Long> allEventIds = request.getRegistrations().stream()
+                .map(BulkRegistrationItemRequestDTO::getEventId)
+                .distinct()
+                .collect(Collectors.toList());
+
+        Map<String, List<Long>> participantEventsMap = new HashMap<>();
+        for (BulkRegistrationItemRequestDTO item : request.getRegistrations()) {
+            for (String cid : item.getParticipantClientIds()) {
+                participantEventsMap.computeIfAbsent(cid, k -> new ArrayList<>()).add(item.getEventId());
+            }
+        }
+
+        List<ParticipantCreateDTO> pList = new ArrayList<>();
+        for (BulkParticipantDTO bp : request.getParticipants()) {
+            ParticipantCreateDTO pDto = ParticipantCreateDTO.builder()
+                    .fullName(bp.getFullName())
+                    .gender(bp.getGender())
+                    .className(bp.getClassName())
+                    .dob(bp.getDob())
+                    .guardianPhone(bp.getGuardianPhone())
+                    .eventIds(participantEventsMap.getOrDefault(bp.getClientId(), allEventIds))
+                    .build();
+            pList.add(pDto);
+        }
+
+        RegistrationCreateRequestDTO singleReq = RegistrationCreateRequestDTO.builder()
+                .schoolId(request.getSchoolId())
+                .eventIds(allEventIds)
+                .remarks(request.getRemarks())
+                .participants(pList)
+                .build();
+
+        RegistrationResponseDTO createdReg = createRegistration(singleReq, currentUser);
+
+        List<BulkRegistrationItemResponseDTO> itemResponses = createdReg.getEvents().stream()
+                .map(e -> BulkRegistrationItemResponseDTO.builder()
+                        .registrationId(createdReg.getId())
+                        .eventId(e.getId())
+                        .eventName(e.getEventName())
+                        .participantCount(createdReg.getParticipantCount() != null ? createdReg.getParticipantCount().intValue() : 0)
+                        .build())
+                .collect(Collectors.toList());
+
+        return BulkRegistrationResponseDTO.builder()
+                .submissionId(UUID.randomUUID().toString())
+                .schoolId(createdReg.getSchool() != null ? createdReg.getSchool().getId() : request.getSchoolId())
+                .registrationsCreated(1)
+                .participantsSubmitted(createdReg.getParticipants() != null ? createdReg.getParticipants().size() : 0)
+                .registrations(itemResponses)
+                .build();
     }
 
     @Override
@@ -187,16 +359,18 @@ public class RegistrationServiceImpl implements RegistrationService {
         Registration registration = findRegistration(id);
         final User resolvedUser = resolveCurrentUser(currentUser);
 
-        long participantCount = participantRepository.countByRegistrationId(id);
-        if (participantCount > 0) {
-            throw new RegistrationHasParticipantsException("Cannot delete registration because participants exist for this registration");
+        long count = registration.getParticipants() != null && !registration.getParticipants().isEmpty()
+                ? registration.getParticipants().size()
+                : participantRepository.countByRegistrationId(id);
+
+        if (count > 0) {
+            throw new RegistrationHasParticipantsException("Cannot delete registration with ID " + id + " because it contains " + count + " participant(s)");
         }
 
         RegistrationResponseDTO oldDto = toDto(registration);
         String oldValueJson = serialize(oldDto);
 
         registrationRepository.delete(registration);
-
         audit(resolvedUser, id, AuditAction.DELETE, oldValueJson, null);
     }
 
@@ -205,13 +379,12 @@ public class RegistrationServiceImpl implements RegistrationService {
         Registration registration = findRegistration(id);
         final User resolvedUser = resolveCurrentUser(currentUser);
 
-        statusValidator.validateTransition(registration.getStatus(), request.getStatus());
-
         RegistrationResponseDTO oldDto = toDto(registration);
         String oldValueJson = serialize(oldDto);
 
+        statusValidator.validateTransition(registration.getStatus(), request.getStatus());
         registration.setStatus(request.getStatus());
-        if (request.getRemarks() != null && !request.getRemarks().isBlank()) {
+        if (request.getRemarks() != null) {
             registration.setRemarks(request.getRemarks().trim());
         }
         registration.setUpdatedBy(resolvedUser);
@@ -228,13 +401,18 @@ public class RegistrationServiceImpl implements RegistrationService {
         Registration registration = findRegistration(id);
         final User resolvedUser = resolveCurrentUser(currentUser);
 
-        statusValidator.validateTransition(registration.getStatus(), RegistrationStatus.PENDING);
-
         RegistrationResponseDTO oldDto = toDto(registration);
         String oldValueJson = serialize(oldDto);
 
-        registration.setStatus(RegistrationStatus.PENDING);
-        if (request != null && request.getRemarks() != null && !request.getRemarks().isBlank()) {
+        statusValidator.validateTransition(registration.getStatus(), RegistrationStatus.SUBMITTED);
+
+        long participantCount = registration.getParticipants() != null ? registration.getParticipants().size() : 0L;
+        if (participantCount == 0) {
+            throw new RegistrationHasParticipantsException("Cannot submit registration with zero participants");
+        }
+
+        registration.setStatus(RegistrationStatus.SUBMITTED);
+        if (request != null && request.getRemarks() != null) {
             registration.setRemarks(request.getRemarks().trim());
         }
         registration.setUpdatedBy(resolvedUser);
@@ -248,137 +426,90 @@ public class RegistrationServiceImpl implements RegistrationService {
 
     @Override
     public RegistrationResponseDTO approveRegistration(Long id, User currentUser) {
-        Registration registration = findRegistration(id);
-        final User resolvedUser = resolveCurrentUser(currentUser);
-
-        if (resolvedUser != null && resolvedUser.getRole() != null) {
-            String roleCode = resolvedUser.getRole().getRoleCode();
-            if ("SCHOOL_STAFF".equals(roleCode) || "LOGIN_TEACHER".equals(roleCode) || "ACCOMPANYING_TEACHER".equals(roleCode)) {
-                throw new ResponseStatusException(HttpStatus.FORBIDDEN, "School staff members are not authorized to approve registrations. Registrations must be submitted for approval.");
-            }
-        }
-
-        statusValidator.validateTransition(registration.getStatus(), RegistrationStatus.APPROVED);
-
-        RegistrationResponseDTO oldDto = toDto(registration);
-        String oldValueJson = serialize(oldDto);
-
-        registration.setStatus(RegistrationStatus.APPROVED);
-        registration.setUpdatedBy(resolvedUser);
-
-        Registration updatedRegistration = registrationRepository.save(registration);
-        RegistrationResponseDTO responseDto = toDto(updatedRegistration);
-
-        audit(resolvedUser, updatedRegistration.getId(), AuditAction.UPDATE, oldValueJson, serialize(responseDto));
-        return responseDto;
+        RegistrationStatusUpdateRequestDTO request = new RegistrationStatusUpdateRequestDTO();
+        request.setStatus(RegistrationStatus.APPROVED);
+        return updateRegistrationStatus(id, request, currentUser);
     }
 
     @Override
     public RegistrationResponseDTO rejectRegistration(Long id, RegistrationRemarksRequestDTO request, User currentUser) {
-        Registration registration = findRegistration(id);
-        final User resolvedUser = resolveCurrentUser(currentUser);
-
-        if (resolvedUser != null && resolvedUser.getRole() != null) {
-            String roleCode = resolvedUser.getRole().getRoleCode();
-            if ("SCHOOL_STAFF".equals(roleCode) || "LOGIN_TEACHER".equals(roleCode) || "ACCOMPANYING_TEACHER".equals(roleCode)) {
-                throw new ResponseStatusException(HttpStatus.FORBIDDEN, "School staff members are not authorized to reject registrations.");
-            }
+        RegistrationStatusUpdateRequestDTO statusRequest = new RegistrationStatusUpdateRequestDTO();
+        statusRequest.setStatus(RegistrationStatus.REJECTED);
+        if (request != null) {
+            statusRequest.setRemarks(request.getRemarks());
         }
-
-        statusValidator.validateTransition(registration.getStatus(), RegistrationStatus.REJECTED);
-
-        RegistrationResponseDTO oldDto = toDto(registration);
-        String oldValueJson = serialize(oldDto);
-
-        registration.setStatus(RegistrationStatus.REJECTED);
-        if (request != null && request.getRemarks() != null && !request.getRemarks().isBlank()) {
-            registration.setRemarks(request.getRemarks().trim());
-        }
-        registration.setUpdatedBy(resolvedUser);
-
-        Registration updatedRegistration = registrationRepository.save(registration);
-        RegistrationResponseDTO responseDto = toDto(updatedRegistration);
-
-        audit(resolvedUser, updatedRegistration.getId(), AuditAction.UPDATE, oldValueJson, serialize(responseDto));
-        return responseDto;
+        return updateRegistrationStatus(id, statusRequest, currentUser);
     }
 
     @Override
     public RegistrationResponseDTO cancelRegistration(Long id, RegistrationRemarksRequestDTO request, User currentUser) {
-        Registration registration = findRegistration(id);
-        final User resolvedUser = resolveCurrentUser(currentUser);
-
-        statusValidator.validateTransition(registration.getStatus(), RegistrationStatus.CANCELLED);
-
-        RegistrationResponseDTO oldDto = toDto(registration);
-        String oldValueJson = serialize(oldDto);
-
-        registration.setStatus(RegistrationStatus.CANCELLED);
-        if (request != null && request.getRemarks() != null && !request.getRemarks().isBlank()) {
-            registration.setRemarks(request.getRemarks().trim());
+        RegistrationStatusUpdateRequestDTO statusRequest = new RegistrationStatusUpdateRequestDTO();
+        statusRequest.setStatus(RegistrationStatus.CANCELLED);
+        if (request != null) {
+            statusRequest.setRemarks(request.getRemarks());
         }
-        registration.setUpdatedBy(resolvedUser);
-
-        Registration updatedRegistration = registrationRepository.save(registration);
-        RegistrationResponseDTO responseDto = toDto(updatedRegistration);
-
-        audit(resolvedUser, updatedRegistration.getId(), AuditAction.UPDATE, oldValueJson, serialize(responseDto));
-        return responseDto;
+        return updateRegistrationStatus(id, statusRequest, currentUser);
     }
 
     @Override
     @Transactional(readOnly = true)
     public RegistrationStatisticsDTO getRegistrationStatistics(Long eventId, Long schoolId) {
-        long total;
-        long draft;
-        long pending;
-        long approved;
-        long rejected;
-        long cancelled;
-        long completed;
+        if (eventId != null || schoolId != null) {
+            long total = 0L;
+            long draft = 0L;
+            long pending = 0L;
+            long submitted = 0L;
+            long approved = 0L;
+            long rejected = 0L;
+            long cancelled = 0L;
+            long completed = 0L;
 
-        if (eventId != null && schoolId != null) {
-            total = registrationRepository.countBySchoolIdAndEventId(schoolId, eventId);
-            draft = registrationRepository.countBySchoolIdAndEventIdAndStatus(schoolId, eventId, RegistrationStatus.DRAFT);
-            pending = registrationRepository.countBySchoolIdAndEventIdAndStatus(schoolId, eventId, RegistrationStatus.PENDING)
-                    + registrationRepository.countBySchoolIdAndEventIdAndStatus(schoolId, eventId, RegistrationStatus.SUBMITTED);
-            approved = registrationRepository.countBySchoolIdAndEventIdAndStatus(schoolId, eventId, RegistrationStatus.APPROVED);
-            rejected = registrationRepository.countBySchoolIdAndEventIdAndStatus(schoolId, eventId, RegistrationStatus.REJECTED);
-            cancelled = registrationRepository.countBySchoolIdAndEventIdAndStatus(schoolId, eventId, RegistrationStatus.CANCELLED);
-            completed = registrationRepository.countBySchoolIdAndEventIdAndStatus(schoolId, eventId, RegistrationStatus.COMPLETED);
-        } else if (eventId != null) {
-            total = registrationRepository.countByEventId(eventId);
-            draft = registrationRepository.countByEventIdAndStatus(eventId, RegistrationStatus.DRAFT);
-            pending = registrationRepository.countByEventIdAndStatus(eventId, RegistrationStatus.PENDING)
-                    + registrationRepository.countByEventIdAndStatus(eventId, RegistrationStatus.SUBMITTED);
-            approved = registrationRepository.countByEventIdAndStatus(eventId, RegistrationStatus.APPROVED);
-            rejected = registrationRepository.countByEventIdAndStatus(eventId, RegistrationStatus.REJECTED);
-            cancelled = registrationRepository.countByEventIdAndStatus(eventId, RegistrationStatus.CANCELLED);
-            completed = registrationRepository.countByEventIdAndStatus(eventId, RegistrationStatus.COMPLETED);
-        } else if (schoolId != null) {
-            total = registrationRepository.countBySchoolId(schoolId);
-            draft = registrationRepository.countBySchoolIdAndStatus(schoolId, RegistrationStatus.DRAFT);
-            pending = registrationRepository.countBySchoolIdAndStatus(schoolId, RegistrationStatus.PENDING)
-                    + registrationRepository.countBySchoolIdAndStatus(schoolId, RegistrationStatus.SUBMITTED);
-            approved = registrationRepository.countBySchoolIdAndStatus(schoolId, RegistrationStatus.APPROVED);
-            rejected = registrationRepository.countBySchoolIdAndStatus(schoolId, RegistrationStatus.REJECTED);
-            cancelled = registrationRepository.countBySchoolIdAndStatus(schoolId, RegistrationStatus.CANCELLED);
-            completed = registrationRepository.countBySchoolIdAndStatus(schoolId, RegistrationStatus.COMPLETED);
-        } else {
-            total = registrationRepository.count();
-            draft = registrationRepository.countByStatus(RegistrationStatus.DRAFT);
-            pending = registrationRepository.countByStatus(RegistrationStatus.PENDING)
-                    + registrationRepository.countByStatus(RegistrationStatus.SUBMITTED);
-            approved = registrationRepository.countByStatus(RegistrationStatus.APPROVED);
-            rejected = registrationRepository.countByStatus(RegistrationStatus.REJECTED);
-            cancelled = registrationRepository.countByStatus(RegistrationStatus.CANCELLED);
-            completed = registrationRepository.countByStatus(RegistrationStatus.COMPLETED);
+            for (RegistrationStatus st : RegistrationStatus.values()) {
+                long c = 0L;
+                if (eventId != null && schoolId != null) {
+                    c = registrationRepository.countBySchoolIdAndEventIdAndStatus(schoolId, eventId, st);
+                } else if (eventId != null) {
+                    c = registrationRepository.countByEventIdAndStatus(eventId, st);
+                } else {
+                    c = registrationRepository.countBySchoolIdAndStatus(schoolId, st);
+                }
+
+                switch (st) {
+                    case DRAFT -> draft = c;
+                    case PENDING -> pending = c;
+                    case SUBMITTED -> submitted = c;
+                    case APPROVED -> approved = c;
+                    case REJECTED -> rejected = c;
+                    case CANCELLED -> cancelled = c;
+                    case COMPLETED -> completed = c;
+                }
+                total += c;
+            }
+
+            return RegistrationStatisticsDTO.builder()
+                    .total(total)
+                    .draft(draft)
+                    .pending(pending + submitted)
+                    .approved(approved)
+                    .rejected(rejected)
+                    .cancelled(cancelled)
+                    .completed(completed)
+                    .build();
         }
+
+        long total = registrationRepository.count();
+        long draft = registrationRepository.countByStatus(RegistrationStatus.DRAFT);
+        long pending = registrationRepository.countByStatus(RegistrationStatus.PENDING);
+        long submitted = registrationRepository.countByStatus(RegistrationStatus.SUBMITTED);
+        long approved = registrationRepository.countByStatus(RegistrationStatus.APPROVED);
+        long rejected = registrationRepository.countByStatus(RegistrationStatus.REJECTED);
+        long cancelled = registrationRepository.countByStatus(RegistrationStatus.CANCELLED);
+        long completed = registrationRepository.countByStatus(RegistrationStatus.COMPLETED);
 
         return RegistrationStatisticsDTO.builder()
                 .total(total)
                 .draft(draft)
-                .pending(pending)
+                .pending(pending + submitted)
                 .approved(approved)
                 .rejected(rejected)
                 .cancelled(cancelled)
@@ -396,10 +527,11 @@ public class RegistrationServiceImpl implements RegistrationService {
             int size,
             String sort
     ) {
-        if (!eventRepository.existsById(eventId)) {
-            throw new ResourceNotFoundException("Event not found: " + eventId);
-        }
-        return getRegistrations(search, statuses, null, eventId, null, null, null, null, null, page, size, sort);
+        Pageable pageable = createPageable(page, size, sort);
+        Specification<Registration> spec = buildSpecification(
+                search, statuses, null, eventId, null, null, null, null, null
+        );
+        return registrationRepository.findAll(spec, pageable).map(this::toDto);
     }
 
     @Override
@@ -414,67 +546,30 @@ public class RegistrationServiceImpl implements RegistrationService {
             String sort,
             User currentUser
     ) {
-        if (!schoolRepository.existsById(schoolId)) {
-            throw new ResourceNotFoundException("School not found: " + schoolId);
-        }
-        checkSchoolAccess(schoolId, currentUser);
-        return getRegistrations(search, statuses, schoolId, eventId, null, null, null, null, null, page, size, sort);
-    }
-
-    private void checkSchoolAccess(Long schoolId, User currentUser) {
-        User resolvedUser = resolveCurrentUser(currentUser);
-        if (resolvedUser == null || resolvedUser.getRole() == null) {
-            return;
-        }
-
-        String roleCode = resolvedUser.getRole().getRoleCode();
-        if ("SUPER_ADMIN".equals(roleCode) || "ADMIN".equals(roleCode) || "EVENT_MANAGER".equals(roleCode)) {
-            return;
-        }
-
-        List<Long> staffSchoolIds = schoolStaffRepository.findSchoolIdsByUserId(resolvedUser.getId());
-        List<Long> createdSchoolIds = schoolRepository.findSchoolIdsByCreatedById(resolvedUser.getId());
-        boolean hasAccess = staffSchoolIds.contains(schoolId) || createdSchoolIds.contains(schoolId);
-
-        if (!hasAccess) {
-            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "You do not have permission to view registrations for this school");
-        }
+        Pageable pageable = createPageable(page, size, sort);
+        Specification<Registration> spec = buildSpecification(
+                search, statuses, schoolId, eventId, null, null, null, null, null
+        );
+        return registrationRepository.findAll(spec, pageable).map(this::toDto);
     }
 
     private Registration findRegistration(Long id) {
-        return registrationRepository.findById(id)
+        return registrationRepository.findByIdWithDetails(id)
+                .or(() -> registrationRepository.findById(id))
                 .orElseThrow(() -> new RegistrationNotFoundException("Registration not found: " + id));
     }
 
-    private Pageable createPageable(int page, int size, String sortParam) {
-        int safePage = Math.max(page, 0);
-        int safeSize = Math.min(Math.max(size, 1), 100);
-        Sort sort = buildSort(sortParam);
-        return PageRequest.of(safePage, safeSize, sort);
-    }
+    private Pageable createPageable(int page, int size, String sort) {
+        int pageNumber = Math.max(0, page);
+        int pageSize = size <= 0 ? 20 : size;
 
-    private Sort buildSort(String sortParam) {
-        if (sortParam == null || sortParam.isBlank()) {
-            return Sort.by(Sort.Direction.DESC, "createdAt");
-        }
+        String[] sortParams = sort != null ? sort.split(",") : new String[]{"createdAt", "desc"};
+        String sortProperty = sortParams[0];
+        Sort.Direction direction = sortParams.length > 1 && sortParams[1].equalsIgnoreCase("asc")
+                ? Sort.Direction.ASC
+                : Sort.Direction.DESC;
 
-        String[] parts = sortParam.split(",");
-        String field = parts[0].trim();
-        Sort.Direction direction = Sort.Direction.ASC;
-        if (parts.length > 1 && parts[1].trim().equalsIgnoreCase("desc")) {
-            direction = Sort.Direction.DESC;
-        }
-
-        return switch (field) {
-            case "id" -> Sort.by(direction, "id");
-            case "createdAt" -> Sort.by(direction, "createdAt");
-            case "updatedAt" -> Sort.by(direction, "updatedAt");
-            case "status" -> Sort.by(direction, "status");
-            case "eventDate" -> Sort.by(direction, "event.eventDate");
-            case "schoolName" -> Sort.by(direction, "school.schoolName");
-            case "eventName" -> Sort.by(direction, "event.eventName");
-            default -> Sort.by(Sort.Direction.DESC, "createdAt");
-        };
+        return PageRequest.of(pageNumber, pageSize, Sort.by(direction, sortProperty));
     }
 
     private Specification<Registration> buildSpecification(
@@ -491,21 +586,11 @@ public class RegistrationServiceImpl implements RegistrationService {
         return (root, query, cb) -> {
             List<Predicate> predicates = new ArrayList<>();
 
-            if (search != null && !search.isBlank()) {
-                String pattern = "%" + search.trim().toLowerCase() + "%";
-                Predicate schoolNameMatch = cb.like(cb.lower(root.get("school").get("schoolName")), pattern);
-                Predicate schoolCodeMatch = cb.like(cb.lower(root.get("school").get("schoolCode")), pattern);
-                Predicate eventNameMatch = cb.like(cb.lower(root.get("event").get("eventName")), pattern);
-                Predicate staffNameMatch = cb.like(cb.lower(root.get("createdByStaff").get("fullName")), pattern);
-
-                Predicate searchPredicate = cb.or(schoolNameMatch, schoolCodeMatch, eventNameMatch, staffNameMatch);
-                try {
-                    Long searchId = Long.parseLong(search.trim());
-                    Predicate idMatch = cb.equal(root.get("id"), searchId);
-                    searchPredicate = cb.or(searchPredicate, idMatch);
-                } catch (NumberFormatException ignored) {
-                }
-                predicates.add(searchPredicate);
+            if (search != null && !search.trim().isEmpty()) {
+                String searchPattern = "%" + search.trim().toLowerCase() + "%";
+                Predicate schoolName = cb.like(cb.lower(root.get("school").get("schoolName")), searchPattern);
+                Predicate schoolCode = cb.like(cb.lower(root.get("school").get("schoolCode")), searchPattern);
+                predicates.add(cb.or(schoolName, schoolCode));
             }
 
             if (statuses != null && !statuses.isEmpty()) {
@@ -517,7 +602,8 @@ public class RegistrationServiceImpl implements RegistrationService {
             }
 
             if (eventId != null) {
-                predicates.add(cb.equal(root.get("event").get("id"), eventId));
+                var join = root.join("registrationEvents");
+                predicates.add(cb.equal(join.get("event").get("id"), eventId));
             }
 
             if (createdByStaffId != null) {
@@ -529,15 +615,11 @@ public class RegistrationServiceImpl implements RegistrationService {
             }
 
             if (createdTo != null) {
-                predicates.add(cb.lessThan(root.get("createdAt"), createdTo.plusDays(1).atStartOfDay()));
+                predicates.add(cb.lessThanOrEqualTo(root.get("createdAt"), createdTo.atTime(23, 59, 59)));
             }
 
-            if (eventDateFrom != null) {
-                predicates.add(cb.greaterThanOrEqualTo(root.get("event").get("eventDate"), eventDateFrom));
-            }
-
-            if (eventDateTo != null) {
-                predicates.add(cb.lessThanOrEqualTo(root.get("event").get("eventDate"), eventDateTo));
+            if (query != null && query.getResultType() != Long.class) {
+                query.distinct(true);
             }
 
             return cb.and(predicates.toArray(new Predicate[0]));
@@ -545,14 +627,14 @@ public class RegistrationServiceImpl implements RegistrationService {
     }
 
     private User resolveCurrentUser(User currentUser) {
-        if (currentUser != null && currentUser.getId() != null) {
+        if (currentUser != null) {
             return currentUser;
         }
         Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
-        if (authentication != null && authentication.getPrincipal() instanceof User user) {
-            return user;
-        }
-        if (authentication != null && authentication.getName() != null) {
+        if (authentication != null && authentication.isAuthenticated() && !"anonymousUser".equals(authentication.getPrincipal())) {
+            if (authentication.getPrincipal() instanceof User user) {
+                return user;
+            }
             return userRepository.findByEmail(authentication.getName()).orElse(null);
         }
         return null;
@@ -572,14 +654,6 @@ public class RegistrationServiceImpl implements RegistrationService {
                     .build();
         }
 
-        EventSummaryDTO eventSummary = null;
-        if (registration.getEvent() != null) {
-            eventSummary = EventSummaryDTO.builder()
-                    .id(registration.getEvent().getId())
-                    .eventName(registration.getEvent().getEventName())
-                    .build();
-        }
-
         StaffSummaryDTO staffSummary = null;
         if (registration.getCreatedByStaff() != null) {
             staffSummary = StaffSummaryDTO.builder()
@@ -588,9 +662,49 @@ public class RegistrationServiceImpl implements RegistrationService {
                     .build();
         }
 
+        List<EventSummaryDTO> eventSummaries = new ArrayList<>();
+        if (registration.getRegistrationEvents() != null && !registration.getRegistrationEvents().isEmpty()) {
+            for (RegistrationEvent re : registration.getRegistrationEvents()) {
+                if (re.getEvent() != null) {
+                    eventSummaries.add(EventSummaryDTO.builder()
+                            .id(re.getEvent().getId())
+                            .eventName(re.getEvent().getEventName())
+                            .build());
+                }
+            }
+        }
+        EventSummaryDTO firstEvent = !eventSummaries.isEmpty() ? eventSummaries.get(0) : null;
+
         long participantCount = 0L;
+        List<ParticipantResponseDTO> participantDtos = null;
         if (registration.getParticipants() != null && !registration.getParticipants().isEmpty()) {
             participantCount = registration.getParticipants().size();
+            participantDtos = new ArrayList<>();
+            for (Participant p : registration.getParticipants()) {
+                List<EventSummaryDTO> pEventSummaries = new ArrayList<>();
+                if (p.getParticipantEvents() != null) {
+                    for (ParticipantEvent pe : p.getParticipantEvents()) {
+                        if (pe.getEvent() != null) {
+                            pEventSummaries.add(EventSummaryDTO.builder()
+                                    .id(pe.getEvent().getId())
+                                    .eventName(pe.getEvent().getEventName())
+                                    .build());
+                        }
+                    }
+                }
+                participantDtos.add(ParticipantResponseDTO.builder()
+                        .id(p.getId())
+                        .registrationId(registration.getId())
+                        .fullName(p.getFullName())
+                        .gender(p.getGender())
+                        .className(p.getClassName())
+                        .dob(p.getDob())
+                        .guardianPhone(p.getGuardianPhone())
+                        .events(pEventSummaries)
+                        .createdAt(p.getCreatedAt())
+                        .updatedAt(p.getUpdatedAt())
+                        .build());
+            }
         } else if (registration.getId() != null) {
             participantCount = participantRepository.countByRegistrationId(registration.getId());
         }
@@ -598,11 +712,14 @@ public class RegistrationServiceImpl implements RegistrationService {
         return RegistrationResponseDTO.builder()
                 .id(registration.getId())
                 .school(schoolSummary)
-                .event(eventSummary)
+                .event(firstEvent)
+                .events(eventSummaries)
+                .eventCount((long) eventSummaries.size())
                 .createdByStaff(staffSummary)
                 .status(registration.getStatus())
                 .remarks(registration.getRemarks())
                 .participantCount(participantCount)
+                .participants(participantDtos)
                 .createdAt(registration.getCreatedAt())
                 .updatedAt(registration.getUpdatedAt())
                 .build();

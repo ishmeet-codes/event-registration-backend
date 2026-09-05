@@ -1,7 +1,10 @@
-package com.registration.management.registration.entity;
+package com.registration.management.participant.entity;
 
 import com.registration.management.auth.entities.User;
 import com.registration.management.enums.Gender;
+import com.registration.management.event.entities.Event;
+import com.registration.management.registration.entity.Checkin;
+import com.registration.management.registration.entity.Registration;
 import jakarta.persistence.*;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Past;
@@ -28,6 +31,7 @@ import java.util.Set;
         "registration",
         "createdBy",
         "updatedBy",
+        "participantEvents",
         "checkins"
 })
 @Entity
@@ -85,6 +89,15 @@ public class Participant {
 
     @OneToMany(
             mappedBy = "participant",
+            cascade = CascadeType.ALL,
+            orphanRemoval = true,
+            fetch = FetchType.LAZY
+    )
+    @Builder.Default
+    private Set<ParticipantEvent> participantEvents = new HashSet<>();
+
+    @OneToMany(
+            mappedBy = "participant",
             fetch = FetchType.LAZY
     )
     @Builder.Default
@@ -97,6 +110,14 @@ public class Participant {
     @UpdateTimestamp
     @Column(name = "updated_at")
     private LocalDateTime updatedAt;
+
+    public void addAssignedEvent(Event event) {
+        ParticipantEvent pe = ParticipantEvent.builder()
+                .participant(this)
+                .event(event)
+                .build();
+        participantEvents.add(pe);
+    }
 
     public void addCheckin(Checkin checkin) {
         checkins.add(checkin);

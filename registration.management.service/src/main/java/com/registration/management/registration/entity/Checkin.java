@@ -3,6 +3,7 @@ package com.registration.management.registration.entity;
 import com.registration.management.auth.entities.User;
 import com.registration.management.school.entity.School;
 import com.registration.management.school.entity.SchoolStaff;
+import com.registration.management.participant.entity.Participant;
 
 import jakarta.persistence.*;
 import jakarta.validation.constraints.Size;

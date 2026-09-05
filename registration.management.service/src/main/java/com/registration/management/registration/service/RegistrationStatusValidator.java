@@ -17,7 +17,7 @@ public class RegistrationStatusValidator {
     private static final Map<RegistrationStatus, Set<RegistrationStatus>> ALLOWED_TRANSITIONS = new EnumMap<>(RegistrationStatus.class);
 
     static {
-        ALLOWED_TRANSITIONS.put(RegistrationStatus.DRAFT, EnumSet.of(RegistrationStatus.PENDING, RegistrationStatus.CANCELLED));
+        ALLOWED_TRANSITIONS.put(RegistrationStatus.DRAFT, EnumSet.of(RegistrationStatus.PENDING, RegistrationStatus.SUBMITTED, RegistrationStatus.CANCELLED));
         ALLOWED_TRANSITIONS.put(RegistrationStatus.PENDING, EnumSet.of(RegistrationStatus.APPROVED, RegistrationStatus.REJECTED, RegistrationStatus.CANCELLED));
         ALLOWED_TRANSITIONS.put(RegistrationStatus.SUBMITTED, EnumSet.of(RegistrationStatus.APPROVED, RegistrationStatus.REJECTED, RegistrationStatus.CANCELLED));
         ALLOWED_TRANSITIONS.put(RegistrationStatus.APPROVED, EnumSet.of(RegistrationStatus.CANCELLED, RegistrationStatus.COMPLETED));

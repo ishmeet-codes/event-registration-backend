@@ -13,19 +13,24 @@ import java.util.Optional;
 @Repository
 public interface RegistrationRepository extends JpaRepository<Registration, Long>, JpaSpecificationExecutor<Registration> {
 
-    boolean existsBySchoolIdAndEventId(Long schoolId, Long eventId);
+    @Query("SELECT COUNT(r) > 0 FROM Registration r JOIN r.registrationEvents re WHERE r.school.id = :schoolId AND re.event.id = :eventId")
+    boolean existsBySchoolIdAndEventId(@Param("schoolId") Long schoolId, @Param("eventId") Long eventId);
 
-    long countByEventId(Long eventId);
+    @Query("SELECT COUNT(DISTINCT r) FROM Registration r JOIN r.registrationEvents re WHERE re.event.id = :eventId")
+    long countByEventId(@Param("eventId") Long eventId);
 
-    long countByEventIdAndStatus(Long eventId, RegistrationStatus status);
+    @Query("SELECT COUNT(DISTINCT r) FROM Registration r JOIN r.registrationEvents re WHERE re.event.id = :eventId AND r.status = :status")
+    long countByEventIdAndStatus(@Param("eventId") Long eventId, @Param("status") RegistrationStatus status);
 
     long countBySchoolId(Long schoolId);
 
     long countBySchoolIdAndStatus(Long schoolId, RegistrationStatus status);
 
-    long countBySchoolIdAndEventId(Long schoolId, Long eventId);
+    @Query("SELECT COUNT(DISTINCT r) FROM Registration r JOIN r.registrationEvents re WHERE r.school.id = :schoolId AND re.event.id = :eventId")
+    long countBySchoolIdAndEventId(@Param("schoolId") Long schoolId, @Param("eventId") Long eventId);
 
-    long countBySchoolIdAndEventIdAndStatus(Long schoolId, Long eventId, RegistrationStatus status);
+    @Query("SELECT COUNT(DISTINCT r) FROM Registration r JOIN r.registrationEvents re WHERE r.school.id = :schoolId AND re.event.id = :eventId AND r.status = :status")
+    long countBySchoolIdAndEventIdAndStatus(@Param("schoolId") Long schoolId, @Param("eventId") Long eventId, @Param("status") RegistrationStatus status);
 
     long countByStatus(RegistrationStatus status);
 
@@ -34,7 +39,6 @@ public interface RegistrationRepository extends JpaRepository<Registration, Long
 
     @Query("SELECT r FROM Registration r " +
             "LEFT JOIN FETCH r.school " +
-            "LEFT JOIN FETCH r.event " +
             "LEFT JOIN FETCH r.createdByStaff " +
             "WHERE r.id = :id")
     Optional<Registration> findByIdWithDetails(@Param("id") Long id);

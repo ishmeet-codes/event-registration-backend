@@ -1,6 +1,6 @@
-package com.registration.management.registration.repository;
+package com.registration.management.participant.repository;
 
-import com.registration.management.registration.entity.Participant;
+import com.registration.management.participant.entity.Participant;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.JpaSpecificationExecutor;
 import org.springframework.stereotype.Repository;
