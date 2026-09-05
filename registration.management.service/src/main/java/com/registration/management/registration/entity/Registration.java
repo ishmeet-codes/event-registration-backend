@@ -70,7 +70,7 @@ public class Registration {
 
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
     @JoinColumn(
-            name = "created_by_staff",
+            name = "created_by_staff_id",
             nullable = false,
             foreignKey = @ForeignKey(name = "fk_registrations_created_by_staff")
     )

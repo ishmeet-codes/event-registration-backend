@@ -153,6 +153,9 @@ public class schoolServiceImpl implements schoolService {
                 ("SUPER_ADMIN".equals(resolvedUser.getRole().getRoleCode()) || "ADMIN".equals(resolvedUser.getRole().getRoleCode()));
 
         if (!isSuperOrAdmin) {
+            if (resolvedUser == null) {
+                throw new org.springframework.security.access.AccessDeniedException("User is not authenticated.");
+            }
             boolean isCreator = school.getCreatedBy() != null && school.getCreatedBy().getId().equals(resolvedUser.getId());
             boolean isStaff = schoolStaffRepository.findSchoolIdsByUserId(resolvedUser.getId()).contains(schoolId);
             if (!isCreator && !isStaff) {

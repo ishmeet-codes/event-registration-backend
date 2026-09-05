@@ -251,6 +251,13 @@ public class RegistrationServiceImpl implements RegistrationService {
         Registration registration = findRegistration(id);
         final User resolvedUser = resolveCurrentUser(currentUser);
 
+        if (resolvedUser != null && resolvedUser.getRole() != null) {
+            String roleCode = resolvedUser.getRole().getRoleCode();
+            if ("SCHOOL_STAFF".equals(roleCode) || "LOGIN_TEACHER".equals(roleCode) || "ACCOMPANYING_TEACHER".equals(roleCode)) {
+                throw new ResponseStatusException(HttpStatus.FORBIDDEN, "School staff members are not authorized to approve registrations. Registrations must be submitted for approval.");
+            }
+        }
+
         statusValidator.validateTransition(registration.getStatus(), RegistrationStatus.APPROVED);
 
         RegistrationResponseDTO oldDto = toDto(registration);
@@ -270,6 +277,13 @@ public class RegistrationServiceImpl implements RegistrationService {
     public RegistrationResponseDTO rejectRegistration(Long id, RegistrationRemarksRequestDTO request, User currentUser) {
         Registration registration = findRegistration(id);
         final User resolvedUser = resolveCurrentUser(currentUser);
+
+        if (resolvedUser != null && resolvedUser.getRole() != null) {
+            String roleCode = resolvedUser.getRole().getRoleCode();
+            if ("SCHOOL_STAFF".equals(roleCode) || "LOGIN_TEACHER".equals(roleCode) || "ACCOMPANYING_TEACHER".equals(roleCode)) {
+                throw new ResponseStatusException(HttpStatus.FORBIDDEN, "School staff members are not authorized to reject registrations.");
+            }
+        }
 
         statusValidator.validateTransition(registration.getStatus(), RegistrationStatus.REJECTED);
 
