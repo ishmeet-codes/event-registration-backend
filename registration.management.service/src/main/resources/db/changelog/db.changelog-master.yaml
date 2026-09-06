@@ -98,3 +98,8 @@ databaseChangeLog:
   - include:
       file: schema/V025_grant_checkin_team_read_permissions.sql
       relativeToChangelogFile: true
+
+  - include:
+      file: schema/V026_seed_reporting_permissions.sql
+      relativeToChangelogFile: true
+
