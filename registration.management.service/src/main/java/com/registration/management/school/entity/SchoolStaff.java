@@ -2,7 +2,6 @@ package com.registration.management.school.entity;
 
 import com.registration.management.auth.entities.User;
 import com.registration.management.enums.StaffRole;
-import com.registration.management.registration.entity.Checkin;
 import com.registration.management.registration.entity.Registration;
 
 import jakarta.persistence.*;
@@ -31,8 +30,7 @@ import java.util.Set;
         "user",
         "createdBy",
         "updatedBy",
-        "registrations",
-        "checkins"
+        "registrations"
 })
 @Entity
 @Table(name = "school_staff")
@@ -105,13 +103,6 @@ public class SchoolStaff {
     @Builder.Default
     private Set<Registration> registrations = new HashSet<>();
 
-    @OneToMany(
-            mappedBy = "schoolStaff",
-            fetch = FetchType.LAZY
-    )
-    @Builder.Default
-    private Set<Checkin> checkins = new HashSet<>();
-
     @CreationTimestamp
     @Column(name = "created_at", nullable = false, updatable = false)
     private LocalDateTime createdAt;
@@ -128,15 +119,5 @@ public class SchoolStaff {
     public void removeRegistration(Registration registration) {
         registrations.remove(registration);
         registration.setCreatedByStaff(null);
-    }
-
-    public void addCheckin(Checkin checkin) {
-        checkins.add(checkin);
-        checkin.setSchoolStaff(this);
-    }
-
-    public void removeCheckin(Checkin checkin) {
-        checkins.remove(checkin);
-        checkin.setSchoolStaff(null);
     }
 }

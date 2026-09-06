@@ -3,7 +3,7 @@ package com.registration.management.participant.entity;
 import com.registration.management.auth.entities.User;
 import com.registration.management.enums.Gender;
 import com.registration.management.event.entities.Event;
-import com.registration.management.registration.entity.Checkin;
+import com.registration.management.checkin.entity.Checkin;
 import com.registration.management.registration.entity.Registration;
 import jakarta.persistence.*;
 import jakarta.validation.constraints.NotBlank;

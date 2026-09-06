@@ -6,19 +6,14 @@ import com.registration.management.audit.entities.AuditLog;
 import com.registration.management.audit.repository.AuditLogRepository;
 import com.registration.management.auth.entities.User;
 import com.registration.management.auth.repository.UserRepository;
-import com.registration.management.common.exception.ResourceNotFoundException;
 import com.registration.management.enums.AuditAction;
 import com.registration.management.enums.AuditStatus;
 import com.registration.management.enums.Gender;
 import com.registration.management.enums.RegistrationStatus;
-import com.registration.management.event.entities.Event;
-import com.registration.management.event.entities.ParticipationCategory;
 import com.registration.management.participant.dto.*;
 import com.registration.management.participant.entity.Participant;
 import com.registration.management.participant.entity.ParticipantEvent;
-import com.registration.management.participant.exception.ParticipantLimitExceededException;
 import com.registration.management.participant.exception.ParticipantNotFoundException;
-import com.registration.management.participant.repository.ParticipantEventRepository;
 import com.registration.management.participant.repository.ParticipantRepository;
 import com.registration.management.participant.service.ParticipantService;
 import com.registration.management.registration.dto.EventSummaryDTO;
@@ -29,7 +24,6 @@ import com.registration.management.registration.repository.RegistrationRepositor
 import com.registration.management.school.repository.schoolStaffRepository;
 import jakarta.persistence.criteria.Predicate;
 import lombok.RequiredArgsConstructor;
-import org.modelmapper.ModelMapper;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
@@ -44,7 +38,6 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 
 import java.time.LocalDate;
-import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -54,11 +47,9 @@ import java.util.List;
 public class ParticipantServiceImpl implements ParticipantService {
 
     private final ParticipantRepository participantRepository;
-    private final ParticipantEventRepository participantEventRepository;
     private final RegistrationRepository registrationRepository;
     private final schoolStaffRepository schoolStaffRepository;
     private final UserRepository userRepository;
-    private final ModelMapper modelMapper;
     private final AuditLogRepository auditLogRepository;
 
     @Autowired(required = false)

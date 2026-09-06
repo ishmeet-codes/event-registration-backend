@@ -283,7 +283,7 @@ public class RegistrationServiceImpl implements RegistrationService {
 
         // Map BulkRegistrationRequestDTO to RegistrationCreateRequestDTO (single registration application)
         List<Long> allEventIds = request.getRegistrations().stream()
-                .map(BulkRegistrationItemRequestDTO::getEventId)
+                .map(item -> item.getEventId())
                 .distinct()
                 .collect(Collectors.toList());
 
@@ -314,7 +314,7 @@ public class RegistrationServiceImpl implements RegistrationService {
                 .participants(pList)
                 .build();
 
-        RegistrationResponseDTO createdReg = createRegistration(singleReq, currentUser);
+        RegistrationResponseDTO createdReg = createRegistration(singleReq, resolvedUser);
 
         List<BulkRegistrationItemResponseDTO> itemResponses = createdReg.getEvents().stream()
                 .map(e -> BulkRegistrationItemResponseDTO.builder()

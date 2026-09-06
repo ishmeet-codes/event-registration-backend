@@ -86,3 +86,15 @@ databaseChangeLog:
   - include:
       file: schema/V022_replace_school_staff_with_login_teacher.sql
       relativeToChangelogFile: true
+
+  - include:
+      file: schema/V023_checkin_management_schema.sql
+      relativeToChangelogFile: true
+
+  - include:
+      file: schema/V024_seed_checkin_permissions.sql
+      relativeToChangelogFile: true
+
+  - include:
+      file: schema/V025_grant_checkin_team_read_permissions.sql
+      relativeToChangelogFile: true

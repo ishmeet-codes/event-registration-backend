@@ -54,6 +54,25 @@ public class GlobalExceptionHandler {
         return ResponseEntity.status(HttpStatus.CONFLICT).body(Map.of("error", ex.getMessage()));
     }
 
+    @ExceptionHandler(com.registration.management.checkin.exception.ParticipantAlreadyCheckedInException.class)
+    public ResponseEntity<Map<String, String>> handleParticipantAlreadyCheckedInException(com.registration.management.checkin.exception.ParticipantAlreadyCheckedInException ex) {
+        return ResponseEntity.status(HttpStatus.CONFLICT).body(Map.of(
+                "code", "PARTICIPANT_ALREADY_CHECKED_IN",
+                "message", ex.getMessage(),
+                "error", ex.getMessage()
+        ));
+    }
+
+    @ExceptionHandler(com.registration.management.checkin.exception.CheckinNotFoundException.class)
+    public ResponseEntity<Map<String, String>> handleCheckinNotFoundException(com.registration.management.checkin.exception.CheckinNotFoundException ex) {
+        return ResponseEntity.status(HttpStatus.NOT_FOUND).body(Map.of("error", ex.getMessage()));
+    }
+
+    @ExceptionHandler(com.registration.management.checkin.exception.InvalidCheckinStatusException.class)
+    public ResponseEntity<Map<String, String>> handleInvalidCheckinStatusException(com.registration.management.checkin.exception.InvalidCheckinStatusException ex) {
+        return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(Map.of("error", ex.getMessage()));
+    }
+
     @ExceptionHandler(com.registration.management.participant.exception.ParticipantHasCheckinRecordsException.class)
     public ResponseEntity<Map<String, String>> handleParticipantHasCheckinRecordsException(com.registration.management.participant.exception.ParticipantHasCheckinRecordsException ex) {
         return ResponseEntity.status(HttpStatus.CONFLICT).body(Map.of("error", ex.getMessage()));
