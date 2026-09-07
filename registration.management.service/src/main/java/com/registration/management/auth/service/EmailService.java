@@ -13,4 +13,6 @@ public interface EmailService {
      * @param setPasswordLink the one-time password-setup link (same reset flow)
      */
     void sendStaffWelcomeEmail(String toEmail, String fullName, String setPasswordLink);
+
+    void sendApprovalQrEmail(String toEmail, String personName, String personType, String schoolName, String eventName, String qrCodeDataUri);
 }

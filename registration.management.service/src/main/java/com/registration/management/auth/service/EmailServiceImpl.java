@@ -249,4 +249,105 @@ public class EmailServiceImpl implements EmailService {
                 </html>
                 """.formatted(fullName, setPasswordLink, setPasswordLink, setPasswordLink);
     }
+
+    // ─── Approval QR Email ───────────────────────────────────────────────────
+
+    @Async
+    @Override
+    public void sendApprovalQrEmail(String toEmail, String personName, String personType, String schoolName, String eventName, String qrCodeDataUri) {
+        if (toEmail == null || toEmail.isBlank()) {
+            return;
+        }
+        try {
+            MimeMessage message = mailSender.createMimeMessage();
+            MimeMessageHelper helper = new MimeMessageHelper(message, true, "UTF-8");
+
+            helper.setFrom(fromAddress);
+            helper.setTo(toEmail);
+            helper.setSubject("Registration Approved — Check-in QR Code for " + eventName);
+            helper.setText(buildApprovalQrEmailBody(personName, personType, schoolName, eventName, qrCodeDataUri), true);
+
+            mailSender.send(message);
+            log.info("[EmailService] Approval QR email sent to: " + toEmail + " for event: " + eventName);
+        } catch (Exception e) {
+            log.severe("[EmailService] Failed to send approval QR email to " + toEmail + ": " + e.getMessage());
+        }
+    }
+
+    private String buildApprovalQrEmailBody(String personName, String personType, String schoolName, String eventName, String qrCodeDataUri) {
+        return """
+                <!DOCTYPE html>
+                <html lang="en">
+                <head>
+                  <meta charset="UTF-8">
+                  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+                  <title>Registration Approved — Your QR Code</title>
+                </head>
+                <body style="margin:0;padding:0;background:#f4f6f9;font-family:'Segoe UI',Arial,sans-serif;">
+                  <table width="100%%" cellpadding="0" cellspacing="0" style="background:#f4f6f9;padding:40px 0;">
+                    <tr>
+                      <td align="center">
+                        <table width="560" cellpadding="0" cellspacing="0"
+                               style="background:#ffffff;border-radius:12px;
+                                      box-shadow:0 2px 12px rgba(0,0,0,.08);overflow:hidden;">
+                          <!-- Header -->
+                          <tr>
+                            <td style="background:linear-gradient(135deg,#059669 0%%,#10b981 100%%);
+                                       padding:36px 40px;text-align:center;">
+                              <h1 style="margin:0;color:#ffffff;font-size:24px;font-weight:700;">
+                                Registration Approved!
+                              </h1>
+                            </td>
+                          </tr>
+                          <!-- Body -->
+                          <tr>
+                            <td style="padding:40px 40px 24px;">
+                              <p style="margin:0 0 16px;color:#374151;font-size:15px;line-height:1.6;">
+                                Dear <strong>%s</strong>,
+                              </p>
+                              <p style="margin:0 0 24px;color:#374151;font-size:15px;line-height:1.6;">
+                                Your registration for <strong>%s</strong> has been officially approved.
+                              </p>
+                              <table cellpadding="12" cellspacing="0" width="100%%" style="background:#f9fafb;border-radius:8px;margin-bottom:24px;">
+                                <tr>
+                                  <td style="color:#6b7280;font-size:13px;">Role / Category:</td>
+                                  <td style="color:#111827;font-weight:600;font-size:13px;">%s</td>
+                                </tr>
+                                <tr>
+                                  <td style="color:#6b7280;font-size:13px;">School:</td>
+                                  <td style="color:#111827;font-weight:600;font-size:13px;">%s</td>
+                                </tr>
+                                <tr>
+                                  <td style="color:#6b7280;font-size:13px;">Event:</td>
+                                  <td style="color:#111827;font-weight:600;font-size:13px;">%s</td>
+                                </tr>
+                              </table>
+                              
+                              <p style="margin:0 0 16px;color:#374151;font-size:15px;text-align:center;font-weight:600;">
+                                Your Check-in QR Code
+                              </p>
+                              <div style="text-align:center;margin-bottom:24px;">
+                                <img src="%s" alt="Check-in QR Code" width="220" height="220" style="border:4px solid #10b981;border-radius:12px;padding:8px;background:#ffffff;" />
+                              </div>
+                              <p style="margin:0;color:#6b7280;font-size:13px;line-height:1.6;text-align:center;">
+                                Please present this QR code on your phone or bring a printed copy at the event check-in desk.
+                              </p>
+                            </td>
+                          </tr>
+                          <!-- Footer -->
+                          <tr>
+                            <td style="background:#f9fafb;padding:20px 40px;border-top:1px solid #e5e7eb;">
+                              <p style="margin:0;color:#9ca3af;font-size:12px;text-align:center;">
+                                &copy; 2026 Event Registration Management System. All rights reserved.
+                              </p>
+                            </td>
+                          </tr>
+                        </table>
+                      </td>
+                    </tr>
+                  </table>
+                </body>
+                </html>
+                """.formatted(personName, eventName, personType, schoolName, eventName, qrCodeDataUri);
+    }
 }

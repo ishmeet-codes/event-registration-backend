@@ -23,6 +23,7 @@ public class ParticipantResponseDTO {
     private Long id;
     private Long registrationId;
     private String fullName;
+    private String email;
     private Gender gender;
     private String className;
     private LocalDate dob;

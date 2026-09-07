@@ -25,8 +25,11 @@ public class RegistrationController {
 
     @GetMapping("/api/registrations/{id}")
     @PreAuthorize("hasAuthority('REGISTRATION_VIEW')")
-    public ResponseEntity<RegistrationResponseDTO> getRegistrationById(@PathVariable("id") Long id) {
-        RegistrationResponseDTO response = registrationService.getRegistrationById(id);
+    public ResponseEntity<RegistrationResponseDTO> getRegistrationById(
+            @PathVariable("id") Long id,
+            @AuthenticationPrincipal User currentUser
+    ) {
+        RegistrationResponseDTO response = registrationService.getRegistrationById(id, currentUser);
         return ResponseEntity.ok(response);
     }
 
@@ -44,12 +47,13 @@ public class RegistrationController {
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate eventDateTo,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int size,
-            @RequestParam(defaultValue = "createdAt,desc") String sort
+            @RequestParam(defaultValue = "createdAt,desc") String sort,
+            @AuthenticationPrincipal User currentUser
     ) {
         Page<RegistrationResponseDTO> result = registrationService.getRegistrations(
                 search, status, schoolId, eventId, createdByStaffId,
                 createdFrom, createdTo, eventDateFrom, eventDateTo,
-                page, size, sort
+                page, size, sort, currentUser
         );
         return ResponseEntity.ok(result);
     }
@@ -153,9 +157,10 @@ public class RegistrationController {
     @PreAuthorize("hasAuthority('REGISTRATION_VIEW')")
     public ResponseEntity<RegistrationStatisticsDTO> getRegistrationStatistics(
             @RequestParam(required = false) Long eventId,
-            @RequestParam(required = false) Long schoolId
+            @RequestParam(required = false) Long schoolId,
+            @AuthenticationPrincipal User currentUser
     ) {
-        RegistrationStatisticsDTO statistics = registrationService.getRegistrationStatistics(eventId, schoolId);
+        RegistrationStatisticsDTO statistics = registrationService.getRegistrationStatistics(eventId, schoolId, currentUser);
         return ResponseEntity.ok(statistics);
     }
 
@@ -167,10 +172,11 @@ public class RegistrationController {
             @RequestParam(required = false) List<RegistrationStatus> status,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int size,
-            @RequestParam(defaultValue = "createdAt,desc") String sort
+            @RequestParam(defaultValue = "createdAt,desc") String sort,
+            @AuthenticationPrincipal User currentUser
     ) {
         Page<RegistrationResponseDTO> result = registrationService.getRegistrationsForEvent(
-                eventId, search, status, page, size, sort
+                eventId, search, status, page, size, sort, currentUser
         );
         return ResponseEntity.ok(result);
     }

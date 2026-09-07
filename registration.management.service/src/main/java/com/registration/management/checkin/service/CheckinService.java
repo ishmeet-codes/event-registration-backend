@@ -52,4 +52,6 @@ public interface CheckinService {
     BulkCheckinResponseDTO bulkCheckin(BulkCheckinRequestDTO request, User currentActor);
 
     BulkCheckinResponseDTO bulkCheckinByEvent(Long eventId, BulkCheckinRequestDTO request, User currentActor);
+
+    QrScanResponseDTO processQrScan(QrScanRequestDTO request, User scannerUser);
 }

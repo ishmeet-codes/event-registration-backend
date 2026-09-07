@@ -63,7 +63,7 @@ class RegistrationControllerTest {
     // 1. GET /api/registrations/{id}
     @Test
     void getRegistrationById_Success_Returns200() throws Exception {
-        when(registrationService.getRegistrationById(101L)).thenReturn(sampleResponse);
+        when(registrationService.getRegistrationById(eq(101L), any())).thenReturn(sampleResponse);
 
         mockMvc.perform(get("/api/registrations/101"))
                 .andExpect(status().isOk())
@@ -74,12 +74,12 @@ class RegistrationControllerTest {
                 .andExpect(jsonPath("$.event.eventName", is("APEX 2026")))
                 .andExpect(jsonPath("$.createdByStaff.fullName", is("Rahul Sharma")));
 
-        verify(registrationService, times(1)).getRegistrationById(101L);
+        verify(registrationService, times(1)).getRegistrationById(eq(101L), any());
     }
 
     @Test
     void getRegistrationById_NotFound_Returns404() throws Exception {
-        when(registrationService.getRegistrationById(999L))
+        when(registrationService.getRegistrationById(eq(999L), any()))
                 .thenThrow(new RegistrationNotFoundException("Registration not found with id: 999"));
 
         mockMvc.perform(get("/api/registrations/999"))
@@ -93,7 +93,7 @@ class RegistrationControllerTest {
         Page<RegistrationResponseDTO> page = new PageImpl<>(List.of(sampleResponse), PageRequest.of(0, 20), 1);
         when(registrationService.getRegistrations(
                 eq("ABC"), any(), eq(5L), eq(10L), eq(15L),
-                any(), any(), any(), any(), eq(0), eq(20), eq("createdAt,desc")
+                any(), any(), any(), any(), eq(0), eq(20), eq("createdAt,desc"), any()
         )).thenReturn(page);
 
         mockMvc.perform(get("/api/registrations")
@@ -353,7 +353,7 @@ class RegistrationControllerTest {
                 .completed(10)
                 .build();
 
-        when(registrationService.getRegistrationStatistics(10L, 5L)).thenReturn(stats);
+        when(registrationService.getRegistrationStatistics(eq(10L), eq(5L), any())).thenReturn(stats);
 
         mockMvc.perform(get("/api/registrations/statistics")
                         .param("eventId", "10")
@@ -372,7 +372,7 @@ class RegistrationControllerTest {
     @Test
     void getRegistrationsForEvent_Success_Returns200() throws Exception {
         Page<RegistrationResponseDTO> page = new PageImpl<>(List.of(sampleResponse), PageRequest.of(0, 20), 1);
-        when(registrationService.getRegistrationsForEvent(eq(10L), eq("test"), any(), eq(0), eq(20), eq("createdAt,desc")))
+        when(registrationService.getRegistrationsForEvent(eq(10L), eq("test"), any(), eq(0), eq(20), eq("createdAt,desc"), any()))
                 .thenReturn(page);
 
         mockMvc.perform(get("/api/events/10/registrations")

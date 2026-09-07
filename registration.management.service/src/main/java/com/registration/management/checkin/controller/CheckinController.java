@@ -28,11 +28,24 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.List;
 
+import com.registration.management.checkin.dto.QrScanRequestDTO;
+import com.registration.management.checkin.dto.QrScanResponseDTO;
+
 @RestController
 @RequiredArgsConstructor
 public class CheckinController {
 
     private final CheckinService checkinService;
+
+    @PostMapping("/api/checkin/scan")
+    @PreAuthorize("hasAuthority('CHECKIN_SCAN') or hasRole('CHECKIN_TEAM') or hasRole('ADMIN') or hasRole('SUPER_ADMIN') or hasRole('EVENT_MANAGER')")
+    public ResponseEntity<QrScanResponseDTO> processQrScan(
+            @Valid @RequestBody QrScanRequestDTO request,
+            @AuthenticationPrincipal User currentUser
+    ) {
+        QrScanResponseDTO response = checkinService.processQrScan(request, currentUser);
+        return ResponseEntity.ok(response);
+    }
 
     @PostMapping("/api/checkins")
     @PreAuthorize("hasAuthority('CHECKIN_CREATE') or hasRole('CHECKIN_TEAM') or hasRole('ADMIN') or hasRole('SUPER_ADMIN') or hasRole('EVENT_MANAGER')")

@@ -103,3 +103,24 @@ databaseChangeLog:
       file: schema/V026_seed_reporting_permissions.sql
       relativeToChangelogFile: true
 
+  - include:
+      file: schema/V027_create_checkin_credentials_table.sql
+      relativeToChangelogFile: true
+
+  - include:
+      file: schema/V028_add_check_in_method_to_checkins.sql
+      relativeToChangelogFile: true
+
+  - include:
+      file: schema/V029_seed_qr_checkin_permissions.sql
+      relativeToChangelogFile: true
+
+  - include:
+      file: schema/V030_add_email_to_participants_table.sql
+      relativeToChangelogFile: true
+
+  - include:
+      file: schema/V031_make_entity_id_nullable_in_audit_logs.sql
+      relativeToChangelogFile: true
+
+

@@ -7,6 +7,9 @@ import com.registration.management.participant.entity.Participant;
 import com.registration.management.registration.entity.Registration;
 import com.registration.management.school.entity.School;
 
+import com.registration.management.checkin.enums.CheckInMethod;
+import com.registration.management.school.entity.SchoolStaff;
+
 import jakarta.persistence.*;
 import jakarta.validation.constraints.Size;
 import lombok.*;
@@ -23,6 +26,7 @@ import java.time.LocalDateTime;
 @EqualsAndHashCode(onlyExplicitlyIncluded = true)
 @ToString(exclude = {
         "participant",
+        "schoolStaff",
         "event",
         "registration",
         "school",
@@ -46,14 +50,27 @@ public class Checkin {
     @EqualsAndHashCode.Include
     private Long id;
 
-    @OneToOne(fetch = FetchType.LAZY, optional = false)
+    @OneToOne(fetch = FetchType.LAZY)
     @JoinColumn(
             name = "participant_id",
-            nullable = false,
+            nullable = true,
             unique = true,
             foreignKey = @ForeignKey(name = "fk_checkins_participant")
     )
     private Participant participant;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(
+            name = "school_staff_id",
+            nullable = true,
+            foreignKey = @ForeignKey(name = "fk_checkins_school_staff")
+    )
+    private SchoolStaff schoolStaff;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "check_in_method", nullable = false, length = 20)
+    @Builder.Default
+    private CheckInMethod checkInMethod = CheckInMethod.MANUAL;
 
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
     @JoinColumn(

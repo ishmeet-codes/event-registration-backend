@@ -24,7 +24,12 @@ import com.registration.management.participant.repository.ParticipantEventReposi
 import com.registration.management.participant.repository.ParticipantRepository;
 import com.registration.management.registration.entity.Registration;
 import com.registration.management.common.exception.ResourceNotFoundException;
+import com.registration.management.checkin.entity.CheckInCredential;
+import com.registration.management.checkin.enums.CheckInMethod;
+import com.registration.management.checkin.repository.CheckInCredentialRepository;
+import com.registration.management.checkin.service.CheckInCredentialService;
 import com.registration.management.school.entity.School;
+import com.registration.management.school.entity.SchoolStaff;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -48,6 +53,8 @@ public class CheckinServiceImpl implements CheckinService {
     private final ParticipantEventRepository participantEventRepository;
     private final EventRepository eventRepository;
     private final AuditLogRepository auditLogRepository;
+    private final CheckInCredentialRepository credentialRepository;
+    private final CheckInCredentialService credentialService;
 
     @Override
     public CheckinResponseDTO checkinParticipant(CheckinRequestDTO request, User currentActor) {
@@ -276,6 +283,8 @@ public class CheckinServiceImpl implements CheckinService {
 
         long totalParticipants = pes.size();
         long checkedIn = checkinRepository.countByEventIdAndStatus(eventId, CheckinStatus.CHECKED_IN);
+        long qrCheckins = checkinRepository.countByEventIdAndCheckInMethod(eventId, CheckInMethod.QR);
+        long manualCheckins = checkinRepository.countByEventIdAndCheckInMethod(eventId, CheckInMethod.MANUAL);
         long checkedOut = checkinRepository.countByEventIdAndStatus(eventId, CheckinStatus.CHECKED_OUT);
         long absent = checkinRepository.countByEventIdAndStatus(eventId, CheckinStatus.ABSENT);
 
@@ -293,6 +302,8 @@ public class CheckinServiceImpl implements CheckinService {
                 .eventName(event.getEventName())
                 .totalParticipants(totalParticipants)
                 .checkedIn(checkedIn)
+                .qrCheckins(qrCheckins)
+                .manualCheckins(manualCheckins)
                 .checkedOut(checkedOut)
                 .notCheckedIn(notCheckedIn)
                 .absent(absent)
@@ -548,5 +559,141 @@ public class CheckinServiceImpl implements CheckinService {
             auditLogRepository.save(log);
         } catch (Exception ignored) {
         }
+    }
+
+    @Override
+    public QrScanResponseDTO processQrScan(QrScanRequestDTO request, User scannerUser) {
+        if (request == null || request.getToken() == null || request.getToken().isBlank()) {
+            logAudit(scannerUser, "CheckinScan", null, AuditAction.CREATE, AuditStatus.FAILED, "Empty QR token submitted");
+            return QrScanResponseDTO.builder()
+                    .success(false)
+                    .code("INVALID_QR")
+                    .message("Invalid or inactive QR credential.")
+                    .build();
+        }
+
+        String tokenHash = credentialService.hashToken(request.getToken().trim());
+        Optional<CheckInCredential> credentialOpt = credentialRepository.findByTokenHash(tokenHash);
+
+        if (credentialOpt.isEmpty()) {
+            logAudit(scannerUser, "CheckinScan", null, AuditAction.CREATE, AuditStatus.FAILED, "INVALID_QR_SCAN: Token hash not found");
+            return QrScanResponseDTO.builder()
+                    .success(false)
+                    .code("INVALID_QR")
+                    .message("Invalid or inactive QR credential.")
+                    .build();
+        }
+
+        CheckInCredential credential = credentialOpt.get();
+
+        if (!credential.isActive()) {
+            logAudit(scannerUser, "CheckInCredential", credential.getId(), AuditAction.CREATE, AuditStatus.FAILED, "INVALID_QR_SCAN: Credential revoked/inactive");
+            return QrScanResponseDTO.builder()
+                    .success(false)
+                    .code("INVALID_QR")
+                    .message("Invalid or inactive QR credential.")
+                    .build();
+        }
+
+        if (credential.getExpiresAt() != null && LocalDateTime.now().isAfter(credential.getExpiresAt())) {
+            logAudit(scannerUser, "CheckInCredential", credential.getId(), AuditAction.CREATE, AuditStatus.FAILED, "INVALID_QR_SCAN: Credential expired at " + credential.getExpiresAt());
+            return QrScanResponseDTO.builder()
+                    .success(false)
+                    .code("EXPIRED_QR")
+                    .message("This QR credential has expired.")
+                    .build();
+        }
+
+        Event event = credential.getEvent();
+        if (request.getEventId() != null && !event.getId().equals(request.getEventId())) {
+            logAudit(scannerUser, "CheckInCredential", credential.getId(), AuditAction.CREATE, AuditStatus.FAILED,
+                    "WRONG_EVENT_QR_SCAN: Credential event ID " + event.getId() + " does not match scanned event ID " + request.getEventId());
+            return QrScanResponseDTO.builder()
+                    .success(false)
+                    .code("WRONG_EVENT")
+                    .message("This QR credential is not valid for this event.")
+                    .build();
+        }
+
+        Registration registration = credential.getRegistration();
+        if (registration == null || registration.getStatus() != RegistrationStatus.APPROVED) {
+            String statusStr = registration != null ? registration.getStatus().name() : "NULL";
+            logAudit(scannerUser, "CheckInCredential", credential.getId(), AuditAction.CREATE, AuditStatus.FAILED, "UNAPPROVED_REGISTRATION: Status " + statusStr);
+            return QrScanResponseDTO.builder()
+                    .success(false)
+                    .code("UNAPPROVED_REGISTRATION")
+                    .message("Registration is not approved.")
+                    .build();
+        }
+
+        // Validate event schedule
+        validateEventSchedule(event);
+
+        Participant participant = credential.getParticipant();
+        SchoolStaff staff = credential.getSchoolStaff();
+
+        // Check duplicate check-in
+        if (participant != null && checkinRepository.existsByParticipantId(participant.getId())) {
+            logAudit(scannerUser, "Checkin", null, AuditAction.CREATE, AuditStatus.FAILED, "DUPLICATE_QR_CHECKIN: Participant ID " + participant.getId());
+            return QrScanResponseDTO.builder()
+                    .success(false)
+                    .code("ALREADY_CHECKED_IN")
+                    .message("This person has already been checked in.")
+                    .build();
+        }
+
+        if (staff != null && checkinRepository.existsBySchoolStaffIdAndEventId(staff.getId(), event.getId())) {
+            logAudit(scannerUser, "Checkin", null, AuditAction.CREATE, AuditStatus.FAILED, "DUPLICATE_QR_CHECKIN: Staff ID " + staff.getId() + " for event " + event.getId());
+            return QrScanResponseDTO.builder()
+                    .success(false)
+                    .code("ALREADY_CHECKED_IN")
+                    .message("This person has already been checked in.")
+                    .build();
+        }
+
+        School school = registration.getSchool();
+
+        Checkin checkin = Checkin.builder()
+                .participant(participant)
+                .schoolStaff(staff)
+                .event(event)
+                .registration(registration)
+                .school(school)
+                .status(CheckinStatus.CHECKED_IN)
+                .checkInMethod(CheckInMethod.QR)
+                .checkedInAt(LocalDateTime.now())
+                .checkedInBy(scannerUser)
+                .remarks("QR Code Check-in")
+                .build();
+
+        Checkin saved = checkinRepository.save(checkin);
+
+        String personName = participant != null ? participant.getFullName() : (staff != null ? staff.getFullName() : "N/A");
+        String personType = credential.getCredentialType().name();
+        String schoolName = school != null ? school.getSchoolName() : "N/A";
+        String eventName = event != null ? event.getEventName() : "N/A";
+
+        QrScanResponseDTO.CheckedInByDTO checkedInByDTO = scannerUser != null ? QrScanResponseDTO.CheckedInByDTO.builder()
+                .id(scannerUser.getId())
+                .name(scannerUser.getFullName() != null ? scannerUser.getFullName() : scannerUser.getEmail())
+                .email(scannerUser.getEmail())
+                .build() : null;
+
+        logAudit(scannerUser, "Checkin", saved.getId(), AuditAction.CREATE, AuditStatus.SUCCESS,
+                "QR_CHECKIN_SUCCESS: Credential " + credential.getId() + ", Person " + personName);
+
+        return QrScanResponseDTO.builder()
+                .success(true)
+                .code("SUCCESS")
+                .message("Check-in successful")
+                .checkInId(saved.getId())
+                .personName(personName)
+                .personType(personType)
+                .schoolName(schoolName)
+                .eventName(eventName)
+                .checkInMethod("QR")
+                .checkedInAt(saved.getCheckedInAt())
+                .checkedInBy(checkedInByDTO)
+                .build();
     }
 }

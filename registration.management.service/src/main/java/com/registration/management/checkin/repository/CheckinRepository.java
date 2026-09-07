@@ -25,4 +25,10 @@ public interface CheckinRepository extends JpaRepository<Checkin, Long>, JpaSpec
     long countByEventId(Long eventId);
 
     long countByEventIdAndStatus(Long eventId, CheckinStatus status);
+
+    boolean existsBySchoolStaffIdAndEventId(Long schoolStaffId, Long eventId);
+
+    Optional<Checkin> findBySchoolStaffIdAndEventId(Long schoolStaffId, Long eventId);
+
+    long countByEventIdAndCheckInMethod(Long eventId, com.registration.management.checkin.enums.CheckInMethod checkInMethod);
 }

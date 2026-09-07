@@ -11,4 +11,6 @@ public interface ParticipantRepository extends JpaRepository<Participant, Long>,
     long countByRegistrationId(Long registrationId);
 
     boolean existsByRegistrationId(Long registrationId);
+
+    java.util.List<Participant> findByEmail(String email);
 }

@@ -12,6 +12,8 @@ public interface RegistrationService {
 
     RegistrationResponseDTO getRegistrationById(Long id);
 
+    RegistrationResponseDTO getRegistrationById(Long id, User currentUser);
+
     Page<RegistrationResponseDTO> getRegistrations(
             String search,
             List<RegistrationStatus> statuses,
@@ -25,6 +27,22 @@ public interface RegistrationService {
             int page,
             int size,
             String sort
+    );
+
+    Page<RegistrationResponseDTO> getRegistrations(
+            String search,
+            List<RegistrationStatus> statuses,
+            Long schoolId,
+            Long eventId,
+            Long createdByStaffId,
+            LocalDate createdFrom,
+            LocalDate createdTo,
+            LocalDate eventDateFrom,
+            LocalDate eventDateTo,
+            int page,
+            int size,
+            String sort,
+            User currentUser
     );
 
     RegistrationResponseDTO createRegistration(RegistrationCreateRequestDTO request, User currentUser);
@@ -47,6 +65,8 @@ public interface RegistrationService {
 
     RegistrationStatisticsDTO getRegistrationStatistics(Long eventId, Long schoolId);
 
+    RegistrationStatisticsDTO getRegistrationStatistics(Long eventId, Long schoolId, User currentUser);
+
     Page<RegistrationResponseDTO> getRegistrationsForEvent(
             Long eventId,
             String search,
@@ -54,6 +74,16 @@ public interface RegistrationService {
             int page,
             int size,
             String sort
+    );
+
+    Page<RegistrationResponseDTO> getRegistrationsForEvent(
+            Long eventId,
+            String search,
+            List<RegistrationStatus> statuses,
+            int page,
+            int size,
+            String sort,
+            User currentUser
     );
 
     Page<RegistrationResponseDTO> getRegistrationsForSchool(

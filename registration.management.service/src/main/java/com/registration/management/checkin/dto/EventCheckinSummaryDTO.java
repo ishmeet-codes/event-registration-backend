@@ -13,6 +13,8 @@ public class EventCheckinSummaryDTO {
     private String eventName;
     private long totalParticipants;
     private long checkedIn;
+    private long qrCheckins;
+    private long manualCheckins;
     private long checkedOut;
     private long notCheckedIn;
     private long absent;

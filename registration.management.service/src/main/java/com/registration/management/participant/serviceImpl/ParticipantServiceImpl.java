@@ -81,13 +81,11 @@ public class ParticipantServiceImpl implements ParticipantService {
             User currentUser
     ) {
         User resolvedUser = resolveCurrentUser(currentUser);
-        if (schoolId != null) {
-            checkSchoolAccess(schoolId, resolvedUser);
-        }
+        List<Long> allowedSchoolIds = determineAllowedSchoolIds(schoolId, resolvedUser);
 
         Pageable pageable = createPageable(page, size, sort);
         Specification<Participant> spec = buildSpecification(
-                search, registrationId, schoolId, eventId, gender, className, dobFrom, dobTo
+                search, registrationId, allowedSchoolIds, eventId, gender, className, dobFrom, dobTo
         );
         return participantRepository.findAll(spec, pageable).map(this::toDto);
     }
@@ -112,6 +110,7 @@ public class ParticipantServiceImpl implements ParticipantService {
                 .className(request.getClassName() != null ? request.getClassName().trim() : null)
                 .dob(request.getDob())
                 .guardianPhone(request.getGuardianPhone().trim())
+                .email(request.getEmail() != null ? request.getEmail().trim() : null)
                 .createdBy(resolvedUser)
                 .updatedBy(resolvedUser)
                 .build();
@@ -146,6 +145,9 @@ public class ParticipantServiceImpl implements ParticipantService {
         }
         if (request.getGuardianPhone() != null) {
             participant.setGuardianPhone(request.getGuardianPhone().trim());
+        }
+        if (request.getEmail() != null) {
+            participant.setEmail(request.getEmail().trim().isEmpty() ? null : request.getEmail().trim());
         }
         participant.setUpdatedBy(resolvedUser);
 
@@ -188,7 +190,7 @@ public class ParticipantServiceImpl implements ParticipantService {
         checkSchoolAccess(registration.getSchool().getId(), resolvedUser);
 
         Pageable pageable = createPageable(page, size, sort);
-        Specification<Participant> spec = buildSpecification(search, registrationId, null, null, gender, className, null, null);
+        Specification<Participant> spec = buildSpecification(search, registrationId, List.of(registration.getSchool().getId()), null, gender, className, null, null);
         return participantRepository.findAll(spec, pageable).map(this::toDto);
     }
 
@@ -206,10 +208,10 @@ public class ParticipantServiceImpl implements ParticipantService {
             User currentUser
     ) {
         User resolvedUser = resolveCurrentUser(currentUser);
-        checkSchoolAccess(schoolId, resolvedUser);
+        List<Long> allowedSchoolIds = determineAllowedSchoolIds(schoolId, resolvedUser);
 
         Pageable pageable = createPageable(page, size, sort);
-        Specification<Participant> spec = buildSpecification(search, null, schoolId, eventId, gender, className, null, null);
+        Specification<Participant> spec = buildSpecification(search, null, allowedSchoolIds, eventId, gender, className, null, null);
         return participantRepository.findAll(spec, pageable).map(this::toDto);
     }
 
@@ -227,12 +229,10 @@ public class ParticipantServiceImpl implements ParticipantService {
             User currentUser
     ) {
         User resolvedUser = resolveCurrentUser(currentUser);
-        if (schoolId != null) {
-            checkSchoolAccess(schoolId, resolvedUser);
-        }
+        List<Long> allowedSchoolIds = determineAllowedSchoolIds(schoolId, resolvedUser);
 
         Pageable pageable = createPageable(page, size, sort);
-        Specification<Participant> spec = buildSpecification(search, null, schoolId, eventId, gender, className, null, null);
+        Specification<Participant> spec = buildSpecification(search, null, allowedSchoolIds, eventId, gender, className, null, null);
         return participantRepository.findAll(spec, pageable).map(this::toDto);
     }
 
@@ -286,15 +286,43 @@ public class ParticipantServiceImpl implements ParticipantService {
                 .orElseThrow(() -> new ParticipantNotFoundException("Participant not found: " + id));
     }
 
-    private void checkSchoolAccess(Long schoolId, User user) {
-        if (user == null) {
-            return;
+    private boolean isGlobalUser(User user) {
+        if (user == null || user.getRole() == null) {
+            return false;
         }
-        if (user.getRole() != null && "ADMIN".equalsIgnoreCase(user.getRole().getRoleCode())) {
+        String code = user.getRole().getRoleCode();
+        return "SUPER_ADMIN".equalsIgnoreCase(code) ||
+               "ADMIN".equalsIgnoreCase(code) ||
+               "EVENT_MANAGER".equalsIgnoreCase(code) ||
+               "CHECKIN_TEAM".equalsIgnoreCase(code);
+    }
+
+    private List<Long> determineAllowedSchoolIds(Long requestedSchoolId, User user) {
+        if (user == null || isGlobalUser(user)) {
+            return requestedSchoolId != null ? List.of(requestedSchoolId) : null;
+        }
+
+        List<Long> userSchoolIds = schoolStaffRepository.findSchoolIdsByUserId(user.getId());
+        if (userSchoolIds == null || userSchoolIds.isEmpty()) {
+            return List.of();
+        }
+
+        if (requestedSchoolId != null) {
+            if (!userSchoolIds.contains(requestedSchoolId)) {
+                throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Access denied to school ID: " + requestedSchoolId);
+            }
+            return List.of(requestedSchoolId);
+        }
+
+        return userSchoolIds;
+    }
+
+    private void checkSchoolAccess(Long schoolId, User user) {
+        if (user == null || isGlobalUser(user)) {
             return;
         }
         List<Long> userSchoolIds = schoolStaffRepository.findSchoolIdsByUserId(user.getId());
-        if (!userSchoolIds.isEmpty() && !userSchoolIds.contains(schoolId)) {
+        if (userSchoolIds == null || userSchoolIds.isEmpty() || !userSchoolIds.contains(schoolId)) {
             throw new ResponseStatusException(HttpStatus.FORBIDDEN, "User does not have access to school ID: " + schoolId);
         }
     }
@@ -315,7 +343,7 @@ public class ParticipantServiceImpl implements ParticipantService {
     private Specification<Participant> buildSpecification(
             String search,
             Long registrationId,
-            Long schoolId,
+            List<Long> allowedSchoolIds,
             Long eventId,
             Gender gender,
             String className,
@@ -336,8 +364,14 @@ public class ParticipantServiceImpl implements ParticipantService {
                 predicates.add(cb.equal(root.get("registration").get("id"), registrationId));
             }
 
-            if (schoolId != null) {
-                predicates.add(cb.equal(root.get("registration").get("school").get("id"), schoolId));
+            if (allowedSchoolIds != null) {
+                if (allowedSchoolIds.isEmpty()) {
+                    predicates.add(cb.disjunction());
+                } else if (allowedSchoolIds.size() == 1) {
+                    predicates.add(cb.equal(root.get("registration").get("school").get("id"), allowedSchoolIds.get(0)));
+                } else {
+                    predicates.add(root.get("registration").get("school").get("id").in(allowedSchoolIds));
+                }
             }
 
             if (eventId != null) {
@@ -406,6 +440,7 @@ public class ParticipantServiceImpl implements ParticipantService {
                 .className(participant.getClassName())
                 .dob(participant.getDob())
                 .guardianPhone(participant.getGuardianPhone())
+                .email(participant.getEmail())
                 .school(schoolSummary)
                 .event(firstEvent)
                 .events(eventSummaries)

@@ -1,6 +1,7 @@
 package com.registration.management.participant.dto;
 
 import com.registration.management.enums.Gender;
+import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Past;
@@ -22,6 +23,10 @@ public class ParticipantUpdateRequestDTO {
     @NotBlank(message = "Full name is required")
     @Size(max = 120, message = "Full name cannot exceed 120 characters")
     private String fullName;
+
+    @Email(message = "Invalid email format")
+    @Size(max = 120, message = "Email cannot exceed 120 characters")
+    private String email;
 
     @NotNull(message = "Gender is required")
     private Gender gender;

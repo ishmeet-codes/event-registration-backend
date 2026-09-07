@@ -6,6 +6,7 @@ import com.registration.management.event.entities.Event;
 import com.registration.management.checkin.entity.Checkin;
 import com.registration.management.registration.entity.Registration;
 import jakarta.persistence.*;
+import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Past;
 import jakarta.validation.constraints.Pattern;
@@ -72,6 +73,11 @@ public class Participant {
     @Pattern(regexp = "^[0-9]{10,15}$")
     @Column(name = "guardian_phone", nullable = false, length = 20)
     private String guardianPhone;
+
+    @Email
+    @Size(max = 120)
+    @Column(name = "email", length = 120)
+    private String email;
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(
