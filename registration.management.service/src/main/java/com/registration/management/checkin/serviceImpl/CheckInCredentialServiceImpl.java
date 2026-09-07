@@ -14,9 +14,7 @@ import com.registration.management.enums.AuditStatus;
 import com.registration.management.enums.StaffRole;
 import com.registration.management.event.entities.Event;
 import com.registration.management.participant.entity.Participant;
-import com.registration.management.participant.entity.ParticipantEvent;
 import com.registration.management.registration.entity.Registration;
-import com.registration.management.registration.entity.RegistrationEvent;
 import com.registration.management.school.entity.SchoolStaff;
 import com.registration.management.school.repository.schoolStaffRepository;
 import jakarta.persistence.EntityNotFoundException;
@@ -59,86 +57,73 @@ public class CheckInCredentialServiceImpl implements CheckInCredentialService {
             return createdCredentials;
         }
 
-        // 1. Participant Credentials
+        Event defaultEvent = null;
+        if (registration.getRegistrationEvents() != null && !registration.getRegistrationEvents().isEmpty()) {
+            defaultEvent = registration.getRegistrationEvents().iterator().next().getEvent();
+        }
+
+        // 1. Participant Credentials — EXACTLY ONE active credential per participant
         if (registration.getParticipants() != null) {
             for (Participant participant : registration.getParticipants()) {
-                Set<Event> participantEvents = new HashSet<>();
-                if (participant.getParticipantEvents() != null && !participant.getParticipantEvents().isEmpty()) {
-                    for (ParticipantEvent pe : participant.getParticipantEvents()) {
-                        if (pe.getEvent() != null) {
-                            participantEvents.add(pe.getEvent());
-                        }
+                Optional<CheckInCredential> existing = credentialRepository
+                        .findFirstByParticipantIdAndActiveTrue(participant.getId());
+                if (existing.isPresent()) {
+                    createdCredentials.add(existing.get());
+                } else {
+                    Event eventToUse = defaultEvent;
+                    if (participant.getParticipantEvents() != null && !participant.getParticipantEvents().isEmpty()) {
+                        eventToUse = participant.getParticipantEvents().iterator().next().getEvent();
                     }
-                } else if (registration.getRegistrationEvents() != null) {
-                    for (RegistrationEvent re : registration.getRegistrationEvents()) {
-                        if (re.getEvent() != null) {
-                            participantEvents.add(re.getEvent());
-                        }
-                    }
-                }
 
-                for (Event event : participantEvents) {
-                    Optional<CheckInCredential> existing = credentialRepository
-                            .findFirstByParticipantIdAndEventIdAndActiveTrue(participant.getId(), event.getId());
-                    if (existing.isPresent()) {
-                        createdCredentials.add(existing.get());
-                    } else {
-                        String rawToken = generateOpaqueToken();
-                        String tokenHash = hashToken(rawToken);
+                    String rawToken = generateOpaqueToken();
+                    String tokenHash = hashToken(rawToken);
 
-                        CheckInCredential cred = CheckInCredential.builder()
-                                .credentialType(CredentialType.PARTICIPANT)
-                                .tokenHash(tokenHash)
-                                .participant(participant)
-                                .registration(registration)
-                                .event(event)
-                                .active(true)
-                                .build();
+                    CheckInCredential cred = CheckInCredential.builder()
+                            .credentialType(CredentialType.PARTICIPANT)
+                            .tokenHash(tokenHash)
+                            .participant(participant)
+                            .registration(registration)
+                            .event(eventToUse)
+                            .active(true)
+                            .build();
 
-                        CheckInCredential saved = credentialRepository.save(cred);
-                        createdCredentials.add(saved);
-                        auditCredentialEvent(registration.getCreatedBy(), saved.getId(), "QR_CREDENTIAL_CREATED",
-                                "Participant credential created for ID " + participant.getId() + ", Event " + event.getId());
-                    }
+                    CheckInCredential saved = credentialRepository.save(cred);
+                    createdCredentials.add(saved);
+                    auditCredentialEvent(registration.getCreatedBy(), saved.getId(), "QR_CREDENTIAL_CREATED",
+                            "Participant credential created for ID " + participant.getId());
                 }
             }
         }
 
-        // 2. Login Teacher Credential
+        // 2. Login Teacher Credential — EXACTLY ONE active credential per teacher
         SchoolStaff loginTeacher = registration.getCreatedByStaff();
-        if (loginTeacher != null && registration.getRegistrationEvents() != null) {
-            for (RegistrationEvent re : registration.getRegistrationEvents()) {
-                Event event = re.getEvent();
-                if (event != null) {
-                    Optional<CheckInCredential> existing = credentialRepository
-                            .findFirstBySchoolStaffIdAndEventIdAndCredentialTypeAndActiveTrue(
-                                    loginTeacher.getId(), event.getId(), CredentialType.LOGIN_TEACHER);
-                    if (existing.isPresent()) {
-                        createdCredentials.add(existing.get());
-                    } else {
-                        String rawToken = generateOpaqueToken();
-                        String tokenHash = hashToken(rawToken);
+        if (loginTeacher != null) {
+            Optional<CheckInCredential> existing = credentialRepository
+                    .findFirstBySchoolStaffIdAndActiveTrue(loginTeacher.getId());
+            if (existing.isPresent()) {
+                createdCredentials.add(existing.get());
+            } else {
+                String rawToken = generateOpaqueToken();
+                String tokenHash = hashToken(rawToken);
 
-                        CheckInCredential cred = CheckInCredential.builder()
-                                .credentialType(CredentialType.LOGIN_TEACHER)
-                                .tokenHash(tokenHash)
-                                .schoolStaff(loginTeacher)
-                                .registration(registration)
-                                .event(event)
-                                .active(true)
-                                .build();
+                CheckInCredential cred = CheckInCredential.builder()
+                        .credentialType(CredentialType.LOGIN_TEACHER)
+                        .tokenHash(tokenHash)
+                        .schoolStaff(loginTeacher)
+                        .registration(registration)
+                        .event(defaultEvent)
+                        .active(true)
+                        .build();
 
-                        CheckInCredential saved = credentialRepository.save(cred);
-                        createdCredentials.add(saved);
-                        auditCredentialEvent(registration.getCreatedBy(), saved.getId(), "QR_CREDENTIAL_CREATED",
-                                "Login Teacher credential created for Staff ID " + loginTeacher.getId() + ", Event " + event.getId());
-                    }
-                }
+                CheckInCredential saved = credentialRepository.save(cred);
+                createdCredentials.add(saved);
+                auditCredentialEvent(registration.getCreatedBy(), saved.getId(), "QR_CREDENTIAL_CREATED",
+                        "Login Teacher credential created for Staff ID " + loginTeacher.getId());
             }
         }
 
-        // 3. Accompanying Teachers Credentials
-        if (registration.getSchool() != null && registration.getRegistrationEvents() != null) {
+        // 3. Accompanying Teachers Credentials — EXACTLY ONE active credential per accompanying teacher
+        if (registration.getSchool() != null) {
             List<SchoolStaff> accompanyingStaff = staffRepository.findAll((root, query, cb) ->
                     cb.and(
                             cb.equal(root.get("school").get("id"), registration.getSchool().getId()),
@@ -148,33 +133,27 @@ public class CheckInCredentialServiceImpl implements CheckInCredentialService {
             );
 
             for (SchoolStaff teacher : accompanyingStaff) {
-                for (RegistrationEvent re : registration.getRegistrationEvents()) {
-                    Event event = re.getEvent();
-                    if (event != null) {
-                        Optional<CheckInCredential> existing = credentialRepository
-                                .findFirstBySchoolStaffIdAndEventIdAndCredentialTypeAndActiveTrue(
-                                        teacher.getId(), event.getId(), CredentialType.ACCOMPANYING_TEACHER);
-                        if (existing.isPresent()) {
-                            createdCredentials.add(existing.get());
-                        } else {
-                            String rawToken = generateOpaqueToken();
-                            String tokenHash = hashToken(rawToken);
+                Optional<CheckInCredential> existing = credentialRepository
+                        .findFirstBySchoolStaffIdAndActiveTrue(teacher.getId());
+                if (existing.isPresent()) {
+                    createdCredentials.add(existing.get());
+                } else {
+                    String rawToken = generateOpaqueToken();
+                    String tokenHash = hashToken(rawToken);
 
-                            CheckInCredential cred = CheckInCredential.builder()
-                                    .credentialType(CredentialType.ACCOMPANYING_TEACHER)
-                                    .tokenHash(tokenHash)
-                                    .schoolStaff(teacher)
-                                    .registration(registration)
-                                    .event(event)
-                                    .active(true)
-                                    .build();
+                    CheckInCredential cred = CheckInCredential.builder()
+                            .credentialType(CredentialType.ACCOMPANYING_TEACHER)
+                            .tokenHash(tokenHash)
+                            .schoolStaff(teacher)
+                            .registration(registration)
+                            .event(defaultEvent)
+                            .active(true)
+                            .build();
 
-                            CheckInCredential saved = credentialRepository.save(cred);
-                            createdCredentials.add(saved);
-                            auditCredentialEvent(registration.getCreatedBy(), saved.getId(), "QR_CREDENTIAL_CREATED",
-                                    "Accompanying Teacher credential created for Staff ID " + teacher.getId() + ", Event " + event.getId());
-                        }
-                    }
+                    CheckInCredential saved = credentialRepository.save(cred);
+                    createdCredentials.add(saved);
+                    auditCredentialEvent(registration.getCreatedBy(), saved.getId(), "QR_CREDENTIAL_CREATED",
+                            "Accompanying Teacher credential created for Staff ID " + teacher.getId());
                 }
             }
         }
@@ -194,14 +173,19 @@ public class CheckInCredentialServiceImpl implements CheckInCredentialService {
         // 1. Search by school staff if user is attached to staff
         Optional<SchoolStaff> staffOpt = staffRepository.findFirstByUserIdAndActiveTrue(currentUser.getId());
         if (staffOpt.isPresent()) {
-            credentials.addAll(credentialRepository.findBySchoolStaffIdAndActiveTrue(staffOpt.get().getId()));
+            Optional<CheckInCredential> credOpt = credentialRepository.findFirstBySchoolStaffIdAndActiveTrue(staffOpt.get().getId());
+            credOpt.ifPresent(credentials::add);
         }
 
         // 2. Search by participant email if currentUser is a participant
-        if (currentUser.getEmail() != null && !currentUser.getEmail().isBlank()) {
+        if (credentials.isEmpty() && currentUser.getEmail() != null && !currentUser.getEmail().isBlank()) {
             List<Participant> participants = participantRepository.findByEmail(currentUser.getEmail());
             for (Participant p : participants) {
-                credentials.addAll(credentialRepository.findByParticipantIdAndActiveTrue(p.getId()));
+                Optional<CheckInCredential> credOpt = credentialRepository.findFirstByParticipantIdAndActiveTrue(p.getId());
+                if (credOpt.isPresent()) {
+                    credentials.add(credOpt.get());
+                    break; // Exactly 1 QR credential per user
+                }
             }
         }
 
@@ -217,8 +201,17 @@ public class CheckInCredentialServiceImpl implements CheckInCredentialService {
     @Transactional(readOnly = true)
     public List<CredentialResponseDTO> getCredentialsByRegistrationId(Long registrationId) {
         List<CheckInCredential> credentials = credentialRepository.findByRegistrationIdAndActiveTrue(registrationId);
-        List<CredentialResponseDTO> dtos = new ArrayList<>();
+        Map<String, CheckInCredential> personUniqueMap = new LinkedHashMap<>();
+
         for (CheckInCredential cred : credentials) {
+            String key = cred.getParticipant() != null
+                    ? "P_" + cred.getParticipant().getId()
+                    : cred.getSchoolStaff() != null ? "S_" + cred.getSchoolStaff().getId() : "C_" + cred.getId();
+            personUniqueMap.putIfAbsent(key, cred);
+        }
+
+        List<CredentialResponseDTO> dtos = new ArrayList<>();
+        for (CheckInCredential cred : personUniqueMap.values()) {
             dtos.add(toDto(cred, null));
         }
         return dtos;

@@ -23,6 +23,10 @@ public interface CheckInCredentialRepository extends JpaRepository<CheckInCreden
 
     List<CheckInCredential> findByRegistrationIdAndActiveTrue(Long registrationId);
 
+    Optional<CheckInCredential> findFirstByParticipantIdAndActiveTrue(Long participantId);
+
+    Optional<CheckInCredential> findFirstBySchoolStaffIdAndActiveTrue(Long schoolStaffId);
+
     Optional<CheckInCredential> findFirstByParticipantIdAndEventIdAndActiveTrue(Long participantId, Long eventId);
 
     Optional<CheckInCredential> findFirstBySchoolStaffIdAndEventIdAndCredentialTypeAndActiveTrue(Long schoolStaffId, Long eventId, CredentialType credentialType);
