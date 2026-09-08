@@ -74,6 +74,7 @@ public class RegistrationServiceImpl implements RegistrationService {
     private final AuditLogRepository auditLogRepository;
     private final CheckInCredentialService checkInCredentialService;
     private final EmailService emailService;
+    private final org.springframework.context.ApplicationEventPublisher eventPublisher;
 
     @Autowired(required = false)
     private ObjectMapper objectMapper = new ObjectMapper().registerModule(new JavaTimeModule());
@@ -461,6 +462,15 @@ public class RegistrationServiceImpl implements RegistrationService {
         RegistrationResponseDTO responseDto = toDto(updatedRegistration);
 
         audit(resolvedUser, updatedRegistration.getId(), AuditAction.UPDATE, oldValueJson, serialize(responseDto));
+
+        if (request.getStatus() == RegistrationStatus.APPROVED) {
+            publishRegistrationNotification(updatedRegistration, com.registration.management.notification.enums.NotificationType.REGISTRATION_APPROVED, "Your registration #" + updatedRegistration.getId() + " has been approved.");
+        } else if (request.getStatus() == RegistrationStatus.REJECTED) {
+            publishRegistrationNotification(updatedRegistration, com.registration.management.notification.enums.NotificationType.REGISTRATION_REJECTED, "Your registration #" + updatedRegistration.getId() + " has been rejected." + (request.getRemarks() != null ? " Remarks: " + request.getRemarks() : ""));
+        } else if (request.getStatus() == RegistrationStatus.CANCELLED) {
+            publishRegistrationNotification(updatedRegistration, com.registration.management.notification.enums.NotificationType.REGISTRATION_CANCELLED, "Your registration #" + updatedRegistration.getId() + " has been cancelled.");
+        }
+
         return responseDto;
     }
 
@@ -492,7 +502,44 @@ public class RegistrationServiceImpl implements RegistrationService {
         RegistrationResponseDTO responseDto = toDto(updatedRegistration);
 
         audit(resolvedUser, updatedRegistration.getId(), AuditAction.UPDATE, oldValueJson, serialize(responseDto));
+
+        publishRegistrationNotification(updatedRegistration, com.registration.management.notification.enums.NotificationType.REGISTRATION_SUBMITTED, "Registration #" + updatedRegistration.getId() + " has been submitted for review.");
+
         return responseDto;
+    }
+
+    private void publishRegistrationNotification(Registration registration, com.registration.management.notification.enums.NotificationType type, String message) {
+        try {
+            Long recipientId = null;
+            if (registration.getCreatedByStaff() != null && registration.getCreatedByStaff().getUser() != null) {
+                recipientId = registration.getCreatedByStaff().getUser().getId();
+            } else if (registration.getCreatedBy() != null) {
+                recipientId = registration.getCreatedBy().getId();
+            }
+
+            if (recipientId != null && eventPublisher != null) {
+                String schoolName = registration.getSchool() != null ? registration.getSchool().getSchoolName() : "N/A";
+                Map<String, Object> vars = new HashMap<>();
+                vars.put("schoolName", schoolName);
+                vars.put("referenceId", registration.getId());
+                vars.put("status", registration.getStatus().name());
+
+                com.registration.management.notification.event.DomainNotificationEvent event = com.registration.management.notification.event.DomainNotificationEvent.builder()
+                        .type(type)
+                        .recipientUserId(recipientId)
+                        .referenceType("REGISTRATION")
+                        .referenceId(registration.getId())
+                        .title(type.name().replace("_", " "))
+                        .message(message)
+                        .variables(vars)
+                        .idempotencyKey("REG_" + type.name() + "_" + registration.getId())
+                        .build();
+
+                eventPublisher.publishEvent(event);
+            }
+        } catch (Exception ex) {
+            // notification publishing is non-blocking
+        }
     }
 
     @Override

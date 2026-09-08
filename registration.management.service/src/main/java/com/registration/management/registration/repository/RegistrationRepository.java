@@ -42,4 +42,7 @@ public interface RegistrationRepository extends JpaRepository<Registration, Long
             "LEFT JOIN FETCH r.createdByStaff " +
             "WHERE r.id = :id")
     Optional<Registration> findByIdWithDetails(@Param("id") Long id);
+
+    @Query("SELECT DISTINCT r FROM Registration r JOIN r.registrationEvents re WHERE re.event.id = :eventId")
+    java.util.List<Registration> findByEventId(@Param("eventId") Long eventId);
 }

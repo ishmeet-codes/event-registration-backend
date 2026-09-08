@@ -85,9 +85,9 @@ class CheckInCredentialServiceImplTest {
 
     @Test
     void testCreateCredentialsForApprovedRegistration() {
-        when(credentialRepository.findFirstByParticipantIdAndEventIdAndActiveTrue(anyLong(), anyLong()))
+        lenient().when(credentialRepository.findFirstByParticipantIdAndEventIdAndActiveTrue(anyLong(), anyLong()))
                 .thenReturn(Optional.empty());
-        when(credentialRepository.findFirstBySchoolStaffIdAndEventIdAndCredentialTypeAndActiveTrue(anyLong(), anyLong(), any()))
+        lenient().when(credentialRepository.findFirstBySchoolStaffIdAndEventIdAndCredentialTypeAndActiveTrue(anyLong(), anyLong(), any()))
                 .thenReturn(Optional.empty());
         when(credentialRepository.save(any(CheckInCredential.class)))
                 .thenAnswer(invocation -> {

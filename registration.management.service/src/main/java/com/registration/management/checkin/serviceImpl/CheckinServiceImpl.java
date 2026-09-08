@@ -55,6 +55,7 @@ public class CheckinServiceImpl implements CheckinService {
     private final AuditLogRepository auditLogRepository;
     private final CheckInCredentialRepository credentialRepository;
     private final CheckInCredentialService credentialService;
+    private final org.springframework.context.ApplicationEventPublisher eventPublisher;
 
     @Override
     public CheckinResponseDTO checkinParticipant(CheckinRequestDTO request, User currentActor) {
@@ -97,6 +98,8 @@ public class CheckinServiceImpl implements CheckinService {
 
         Checkin saved = checkinRepository.save(checkin);
         logAudit(currentActor, "Checkin", saved.getId(), AuditAction.CREATE, AuditStatus.SUCCESS, null);
+
+        publishCheckinNotification(saved, com.registration.management.notification.enums.NotificationType.CHECKIN_CONFIRMED, "Participant " + participant.getFullName() + " checked in for event " + event.getEventName());
 
         return mapToResponseDTO(saved);
     }
@@ -228,7 +231,42 @@ public class CheckinServiceImpl implements CheckinService {
         Checkin saved = checkinRepository.save(checkin);
         logAudit(currentActor, "Checkin", saved.getId(), AuditAction.UPDATE, AuditStatus.SUCCESS, null);
 
+        publishCheckinNotification(saved, com.registration.management.notification.enums.NotificationType.CHECKOUT_CONFIRMED, "Participant " + (saved.getParticipant() != null ? saved.getParticipant().getFullName() : "Attendee") + " checked out.");
+
         return mapToResponseDTO(saved);
+    }
+
+    private void publishCheckinNotification(Checkin checkin, com.registration.management.notification.enums.NotificationType type, String message) {
+        try {
+            Long recipientId = null;
+            if (checkin.getRegistration() != null && checkin.getRegistration().getCreatedByStaff() != null && checkin.getRegistration().getCreatedByStaff().getUser() != null) {
+                recipientId = checkin.getRegistration().getCreatedByStaff().getUser().getId();
+            } else if (checkin.getRegistration() != null && checkin.getRegistration().getCreatedBy() != null) {
+                recipientId = checkin.getRegistration().getCreatedBy().getId();
+            }
+
+            if (recipientId != null && eventPublisher != null) {
+                Map<String, Object> vars = new HashMap<>();
+                vars.put("eventName", checkin.getEvent() != null ? checkin.getEvent().getEventName() : "Event");
+                vars.put("schoolName", checkin.getSchool() != null ? checkin.getSchool().getSchoolName() : "School");
+                vars.put("referenceId", checkin.getId());
+
+                com.registration.management.notification.event.DomainNotificationEvent event = com.registration.management.notification.event.DomainNotificationEvent.builder()
+                        .type(type)
+                        .recipientUserId(recipientId)
+                        .referenceType("CHECK_IN")
+                        .referenceId(checkin.getId())
+                        .title(type.name().replace("_", " "))
+                        .message(message)
+                        .variables(vars)
+                        .idempotencyKey("CHECKIN_" + type.name() + "_" + checkin.getId())
+                        .build();
+
+                eventPublisher.publishEvent(event);
+            }
+        } catch (Exception ex) {
+            // non-blocking
+        }
     }
 
     @Override

@@ -31,4 +31,6 @@ public interface schoolStaffRepository extends JpaRepository<SchoolStaff, Long>,
     Optional<SchoolStaff> findFirstByUserIdAndActiveTrue(Long userId);
 
     Optional<SchoolStaff> findFirstByUserIdAndSchoolIdAndActiveTrue(Long userId, Long schoolId);
+
+    java.util.List<SchoolStaff> findBySchoolId(Long schoolId);
 }

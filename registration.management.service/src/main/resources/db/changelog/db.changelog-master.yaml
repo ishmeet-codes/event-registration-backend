@@ -123,4 +123,13 @@ databaseChangeLog:
       file: schema/V031_make_entity_id_nullable_in_audit_logs.sql
       relativeToChangelogFile: true
 
+  - include:
+      file: schema/V032_create_notification_tables.sql
+      relativeToChangelogFile: true
+
+  - include:
+      file: schema/V033_seed_notification_permissions.sql
+      relativeToChangelogFile: true
+
+
 
