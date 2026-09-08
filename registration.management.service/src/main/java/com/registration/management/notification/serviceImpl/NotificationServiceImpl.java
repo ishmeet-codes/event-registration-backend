@@ -233,6 +233,7 @@ public class NotificationServiceImpl implements NotificationService {
             notification.setReadAt(LocalDateTime.now());
             notification.setStatus(NotificationStatus.READ);
             notification = notificationRepository.save(notification);
+            saveAuditLog(currentUser, "Notification", id, AuditAction.UPDATE, AuditStatus.SUCCESS, "Marked notification as read");
         }
         return mapper.toNotificationResponseDTO(notification);
     }
@@ -243,6 +244,7 @@ public class NotificationServiceImpl implements NotificationService {
     @Transactional
     public Map<String, Object> markAllAsRead(User currentUser) {
         int updatedCount = notificationRepository.markAllAsReadForRecipient(currentUser.getId(), LocalDateTime.now());
+        saveAuditLog(currentUser, "Notification", null, AuditAction.UPDATE, AuditStatus.SUCCESS, "Marked " + updatedCount + " notifications as read");
         Map<String, Object> response = new HashMap<>();
         response.put("updatedCount", updatedCount);
         response.put("message", "Marked " + updatedCount + " notifications as read");
@@ -271,7 +273,7 @@ public class NotificationServiceImpl implements NotificationService {
         notification.setDeletedAt(LocalDateTime.now());
         notificationRepository.save(notification);
 
-        saveAuditLog(currentUser, "Notification", id, AuditAction.DELETE, AuditStatus.SUCCESS, null);
+        saveAuditLog(currentUser, "Notification", id, AuditAction.DELETE, AuditStatus.SUCCESS, "Deleted notification with id: " + id);
     }
 
     // ─── 8. Bulk Notification ────────────────────────────────────────────────────

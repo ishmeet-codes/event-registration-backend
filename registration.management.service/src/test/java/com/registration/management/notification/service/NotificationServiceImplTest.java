@@ -1,16 +1,18 @@
 package com.registration.management.notification.service;
 
+import com.registration.management.audit.entities.AuditLog;
 import com.registration.management.audit.repository.AuditLogRepository;
 import com.registration.management.auth.entities.Role;
 import com.registration.management.auth.entities.User;
 import com.registration.management.auth.repository.UserRepository;
-import com.registration.management.common.exception.ResourceNotFoundException;
+import com.registration.management.enums.AuditAction;
+import com.registration.management.enums.AuditStatus;
+import org.mockito.ArgumentCaptor;
 import com.registration.management.notification.dto.*;
 import com.registration.management.notification.entity.*;
 import com.registration.management.notification.enums.NotificationChannel;
 import com.registration.management.notification.enums.NotificationStatus;
 import com.registration.management.notification.enums.NotificationType;
-import com.registration.management.notification.enums.RecipientTargetType;
 import com.registration.management.notification.mapper.NotificationMapper;
 import com.registration.management.notification.repository.NotificationLogRepository;
 import com.registration.management.notification.repository.NotificationPreferenceRepository;
@@ -30,11 +32,7 @@ import org.mockito.Mock;
 import org.mockito.Spy;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.modelmapper.ModelMapper;
-import org.springframework.data.domain.Page;
-import org.springframework.data.domain.PageImpl;
-import org.springframework.data.domain.PageRequest;
-import org.springframework.data.domain.Pageable;
-import org.springframework.data.jpa.domain.Specification;
+
 import org.springframework.security.access.AccessDeniedException;
 
 import java.time.LocalDateTime;
@@ -269,5 +267,169 @@ class NotificationServiceImplTest {
         NotificationPreferenceDTO updated = notificationService.updatePreferences(updateReq, regularUser);
         assertThat(updated.isEmailEnabled()).isFalse();
         assertThat(updated.isRegistrationEnabled()).isFalse();
+    }
+
+    @Test
+    @DisplayName("Mark as read saves audit log")
+    void testMarkAsReadAuditLog() {
+        when(notificationRepository.findByIdAndDeletedAtIsNull(101L)).thenReturn(Optional.of(testNotification));
+        when(notificationRepository.save(any(Notification.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        notificationService.markAsRead(101L, recipientUser);
+
+        ArgumentCaptor<AuditLog> captor = ArgumentCaptor.forClass(AuditLog.class);
+        verify(auditLogRepository).save(captor.capture());
+        AuditLog auditLog = captor.getValue();
+        assertThat(auditLog.getEntityName()).isEqualTo("Notification");
+        assertThat(auditLog.getEntityId()).isEqualTo(101L);
+        assertThat(auditLog.getAction()).isEqualTo(AuditAction.UPDATE);
+        assertThat(auditLog.getStatus()).isEqualTo(AuditStatus.SUCCESS);
+    }
+
+    @Test
+    @DisplayName("Mark all as read saves audit log")
+    void testMarkAllAsReadAuditLog() {
+        when(notificationRepository.markAllAsReadForRecipient(eq(recipientUser.getId()), any())).thenReturn(5);
+
+        Map<String, Object> result = notificationService.markAllAsRead(recipientUser);
+
+        assertThat(result.get("updatedCount")).isEqualTo(5);
+        ArgumentCaptor<AuditLog> captor = ArgumentCaptor.forClass(AuditLog.class);
+        verify(auditLogRepository).save(captor.capture());
+        AuditLog auditLog = captor.getValue();
+        assertThat(auditLog.getEntityName()).isEqualTo("Notification");
+        assertThat(auditLog.getAction()).isEqualTo(AuditAction.UPDATE);
+        assertThat(auditLog.getStatus()).isEqualTo(AuditStatus.SUCCESS);
+    }
+
+    @Test
+    @DisplayName("Delete notification saves audit log")
+    void testDeleteNotificationAuditLog() {
+        when(notificationRepository.findByIdAndDeletedAtIsNull(101L)).thenReturn(Optional.of(testNotification));
+        when(notificationRepository.save(any(Notification.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        notificationService.deleteNotification(101L, recipientUser);
+
+        ArgumentCaptor<AuditLog> captor = ArgumentCaptor.forClass(AuditLog.class);
+        verify(auditLogRepository).save(captor.capture());
+        AuditLog auditLog = captor.getValue();
+        assertThat(auditLog.getEntityName()).isEqualTo("Notification");
+        assertThat(auditLog.getEntityId()).isEqualTo(101L);
+        assertThat(auditLog.getAction()).isEqualTo(AuditAction.DELETE);
+        assertThat(auditLog.getStatus()).isEqualTo(AuditStatus.SUCCESS);
+    }
+
+    @Test
+    @DisplayName("Cancel scheduled notification saves audit log")
+    void testCancelScheduledNotificationAuditLog() {
+        Notification scheduledNotification = Notification.builder()
+                .id(202L)
+                .recipient(recipientUser)
+                .type(NotificationType.EVENT_REMINDER)
+                .channel(NotificationChannel.IN_APP)
+                .title("Reminder")
+                .status(NotificationStatus.PENDING)
+                .scheduledAt(LocalDateTime.now().plusDays(2))
+                .build();
+
+        when(notificationRepository.findByIdAndDeletedAtIsNull(202L)).thenReturn(Optional.of(scheduledNotification));
+        when(notificationRepository.save(any(Notification.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        notificationService.cancelScheduledNotification(202L, adminUser);
+
+        ArgumentCaptor<AuditLog> captor = ArgumentCaptor.forClass(AuditLog.class);
+        verify(auditLogRepository).save(captor.capture());
+        AuditLog auditLog = captor.getValue();
+        assertThat(auditLog.getEntityName()).isEqualTo("ScheduledNotification");
+        assertThat(auditLog.getEntityId()).isEqualTo(202L);
+        assertThat(auditLog.getAction()).isEqualTo(AuditAction.DELETE);
+        assertThat(auditLog.getStatus()).isEqualTo(AuditStatus.SUCCESS);
+    }
+
+    @Test
+    @DisplayName("Update template saves audit log")
+    void testUpdateTemplateAuditLog() {
+        NotificationTemplate template = NotificationTemplate.builder()
+                .id(10L)
+                .code("TEST_TPL")
+                .name("Old Name")
+                .type(NotificationType.ANNOUNCEMENT)
+                .channel(NotificationChannel.IN_APP)
+                .body("Hello {{recipientName}}")
+                .active(true)
+                .build();
+
+        NotificationTemplateRequestDTO req = NotificationTemplateRequestDTO.builder()
+                .code("TEST_TPL")
+                .name("New Name")
+                .type(NotificationType.ANNOUNCEMENT)
+                .channel(NotificationChannel.IN_APP)
+                .body("Updated body {{recipientName}}")
+                .active(true)
+                .build();
+
+        when(templateRepository.findByIdAndDeletedAtIsNull(10L)).thenReturn(Optional.of(template));
+        when(templateRepository.save(any(NotificationTemplate.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        notificationService.updateTemplate(10L, req, adminUser);
+
+        ArgumentCaptor<AuditLog> captor = ArgumentCaptor.forClass(AuditLog.class);
+        verify(auditLogRepository).save(captor.capture());
+        AuditLog auditLog = captor.getValue();
+        assertThat(auditLog.getEntityName()).isEqualTo("NotificationTemplate");
+        assertThat(auditLog.getEntityId()).isEqualTo(10L);
+        assertThat(auditLog.getAction()).isEqualTo(AuditAction.UPDATE);
+    }
+
+    @Test
+    @DisplayName("Delete template saves audit log")
+    void testDeleteTemplateAuditLog() {
+        NotificationTemplate template = NotificationTemplate.builder()
+                .id(10L)
+                .code("TEST_TPL")
+                .name("Test Template")
+                .type(NotificationType.ANNOUNCEMENT)
+                .channel(NotificationChannel.IN_APP)
+                .body("Hello {{recipientName}}")
+                .active(true)
+                .build();
+
+        when(templateRepository.findByIdAndDeletedAtIsNull(10L)).thenReturn(Optional.of(template));
+        when(templateRepository.save(any(NotificationTemplate.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        notificationService.deleteTemplate(10L, adminUser);
+
+        ArgumentCaptor<AuditLog> captor = ArgumentCaptor.forClass(AuditLog.class);
+        verify(auditLogRepository).save(captor.capture());
+        AuditLog auditLog = captor.getValue();
+        assertThat(auditLog.getEntityName()).isEqualTo("NotificationTemplate");
+        assertThat(auditLog.getEntityId()).isEqualTo(10L);
+        assertThat(auditLog.getAction()).isEqualTo(AuditAction.DELETE);
+    }
+
+    @Test
+    @DisplayName("Update template status saves audit log")
+    void testUpdateTemplateStatusAuditLog() {
+        NotificationTemplate template = NotificationTemplate.builder()
+                .id(10L)
+                .code("TEST_TPL")
+                .name("Test Template")
+                .type(NotificationType.ANNOUNCEMENT)
+                .channel(NotificationChannel.IN_APP)
+                .body("Hello {{recipientName}}")
+                .active(true)
+                .build();
+
+        when(templateRepository.findByIdAndDeletedAtIsNull(10L)).thenReturn(Optional.of(template));
+        when(templateRepository.save(any(NotificationTemplate.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        notificationService.updateTemplateStatus(10L, TemplateStatusUpdateRequestDTO.builder().active(false).build(), adminUser);
+
+        ArgumentCaptor<AuditLog> captor = ArgumentCaptor.forClass(AuditLog.class);
+        verify(auditLogRepository).save(captor.capture());
+        AuditLog auditLog = captor.getValue();
+        assertThat(auditLog.getEntityName()).isEqualTo("NotificationTemplate");
+        assertThat(auditLog.getEntityId()).isEqualTo(10L);
+        assertThat(auditLog.getAction()).isEqualTo(AuditAction.UPDATE);
     }
 }
