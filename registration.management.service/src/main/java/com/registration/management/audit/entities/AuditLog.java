@@ -36,16 +36,26 @@ public class AuditLog {
     private User user;
 
     @Size(max = 50)
-    @Column(name = "entity_name", nullable = false, length = 50)
+    @Column(name = "entity_name", length = 50)
     private String entityName;
 
     @Column(name = "entity_id")
     private Long entityId;
 
     @Enumerated(EnumType.STRING)
-    @JdbcTypeCode(SqlTypes.NAMED_ENUM)
-    @Column(name = "action", columnDefinition = "audit_action", nullable = false)
+    @Column(name = "action", nullable = false, length = 100)
     private AuditAction action;
+
+    @Size(max = 50)
+    @Column(name = "module", length = 50)
+    private String module;
+
+    @Column(name = "description", columnDefinition = "TEXT")
+    private String description;
+
+    @Size(max = 100)
+    @Column(name = "request_id", length = 100)
+    private String requestId;
 
     @JdbcTypeCode(SqlTypes.JSON)
     @Column(name = "old_value", columnDefinition = "jsonb")
@@ -56,8 +66,7 @@ public class AuditLog {
     private String newValue;
 
     @Enumerated(EnumType.STRING)
-    @JdbcTypeCode(SqlTypes.NAMED_ENUM)
-    @Column(name = "status", columnDefinition = "audit_status", nullable = false)
+    @Column(name = "status", nullable = false, length = 50)
     private AuditStatus status;
 
     @Column(name = "error_message", columnDefinition = "TEXT")

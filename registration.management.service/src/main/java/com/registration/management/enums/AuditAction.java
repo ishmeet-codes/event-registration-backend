@@ -2,10 +2,63 @@ package com.registration.management.enums;
 
 public enum AuditAction {
 
+    // Legacy / Generic actions for backward compatibility
     CREATE,
     UPDATE,
     DELETE,
     LOGIN,
-    LOGOUT
+    LOGOUT,
+    CHECKIN,
+    EXPORT,
+    ROLE_CHANGED,
+
+    // Authentication & Security
+    LOGIN_SUCCESS,
+    LOGIN_FAILED,
+    TOKEN_REFRESH,
+    PASSWORD_CHANGED,
+    PASSWORD_RESET,
+    ACCESS_DENIED,
+    UNAUTHORIZED_ACCESS_ATTEMPT,
+
+    // School
+    SCHOOL_CREATED,
+    SCHOOL_UPDATED,
+    SCHOOL_DELETED,
+
+    // Event
+    EVENT_CREATED,
+    EVENT_UPDATED,
+    EVENT_DELETED,
+    EVENT_STATUS_CHANGED,
+
+    // Registration
+    REGISTRATION_CREATED,
+    REGISTRATION_UPDATED,
+    REGISTRATION_SUBMITTED,
+    REGISTRATION_APPROVED,
+    REGISTRATION_REJECTED,
+    REGISTRATION_CANCELLED,
+
+    // Participant
+    PARTICIPANT_CREATED,
+    PARTICIPANT_UPDATED,
+    PARTICIPANT_DELETED,
+
+    // Participation
+    PARTICIPATION_CREATED,
+    PARTICIPATION_UPDATED,
+    PARTICIPATION_CANCELLED,
+
+    // Check-in
+    CHECKIN_CREATED,
+    CHECKOUT_CREATED,
+    CHECKIN_CANCELLED,
+
+    // Notification
+    NOTIFICATION_CREATED,
+    NOTIFICATION_SENT,
+    NOTIFICATION_FAILED,
+    NOTIFICATION_RETRIED
 
 }
