@@ -20,7 +20,7 @@ public class HealthPingScheduler {
     private final String healthUrl;
 
     public HealthPingScheduler(RestTemplate restTemplate,
-                               @Value("${health.ping.url}") String healthUrl) {
+                               @Value("${health.ping.url:http://localhost:8080/actuator/health}") String healthUrl) {
         this.restTemplate = restTemplate;
         this.healthUrl = healthUrl;
     }
