@@ -139,5 +139,13 @@ databaseChangeLog:
       file: schema/V035_seed_audit_permissions.sql
       relativeToChangelogFile: true
 
+  - include:
+      file: schema/V036_create_email_campaign_tables.sql
+      relativeToChangelogFile: true
+
+  - include:
+      file: schema/V037_seed_campaign_permissions.sql
+      relativeToChangelogFile: true
+
 
 
