@@ -6,12 +6,11 @@ import com.registration.management.notification.enums.NotificationChannel;
 import com.registration.management.notification.enums.NotificationStatus;
 import com.registration.management.notification.repository.NotificationLogRepository;
 import com.registration.management.notification.repository.NotificationRepository;
-import jakarta.mail.internet.MimeMessage;
+import com.resend.Resend;
+import com.resend.services.emails.model.CreateEmailOptions;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.mail.javamail.JavaMailSender;
-import org.springframework.mail.javamail.MimeMessageHelper;
 import org.springframework.stereotype.Component;
 
 import java.time.LocalDateTime;
@@ -21,12 +20,14 @@ import java.time.LocalDateTime;
 @RequiredArgsConstructor
 public class EmailNotificationSender implements NotificationChannelSender {
 
-    private final JavaMailSender mailSender;
     private final NotificationRepository notificationRepository;
     private final NotificationLogRepository notificationLogRepository;
 
-    @Value("${app.mail.from:noreply@eventregistration.com}")
+    @Value("${app.mail.from:Acme <onboarding@resend.dev>}")
     private String fromAddress;
+
+    @Value("${resend.api.key:}")
+    private String resendApiKey;
 
     @Override
     public NotificationChannel getChannel() {
@@ -45,17 +46,21 @@ public class EmailNotificationSender implements NotificationChannelSender {
         notificationRepository.save(notification);
 
         try {
-            MimeMessage mimeMessage = mailSender.createMimeMessage();
-            MimeMessageHelper helper = new MimeMessageHelper(mimeMessage, true, "UTF-8");
+            if (resendApiKey == null || resendApiKey.isBlank()) {
+                throw new IllegalStateException("Resend API key is not configured");
+            }
 
-            helper.setFrom(fromAddress);
-            helper.setTo(recipientEmail);
-            helper.setSubject(notification.getTitle() != null ? notification.getTitle() : "Notification");
-            helper.setText(buildHtmlEmail(notification), true);
+            Resend resend = new Resend(resendApiKey);
+            CreateEmailOptions params = CreateEmailOptions.builder()
+                .from((fromAddress != null && !fromAddress.isBlank()) ? fromAddress : "Acme <onboarding@resend.dev>")
+                .to(recipientEmail)
+                .subject(notification.getTitle() != null ? notification.getTitle() : "Notification")
+                .html(buildHtmlEmail(notification))
+                .build();
 
-            mailSender.send(mimeMessage);
+            resend.emails().send(params);
 
-            LocalDateTime now = LocalDateTime.now();
+            LocalDateTime now = java.time.LocalDateTime.now();
             notification.setStatus(NotificationStatus.SENT);
             notification.setSentAt(now);
             notification.setFailureReason(null);

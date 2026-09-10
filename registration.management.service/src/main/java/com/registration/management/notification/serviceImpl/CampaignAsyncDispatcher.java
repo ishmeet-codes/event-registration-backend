@@ -4,18 +4,18 @@ import com.registration.management.notification.entity.EmailCampaign;
 import com.registration.management.notification.entity.EmailCampaignRecipient;
 import com.registration.management.notification.enums.CampaignStatus;
 import com.registration.management.notification.repository.EmailCampaignRepository;
-import jakarta.mail.internet.MimeMessage;
+import com.resend.Resend;
+import com.resend.services.emails.model.CreateEmailOptions;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.mail.javamail.JavaMailSender;
-import org.springframework.mail.javamail.MimeMessageHelper;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.List;
 
 @Slf4j
@@ -24,10 +24,12 @@ import java.util.List;
 public class CampaignAsyncDispatcher {
 
     private final EmailCampaignRepository campaignRepository;
-    private final JavaMailSender mailSender;
 
-    @Value("${app.mail.from:noreply@eventregistration.com}")
+    @Value("${app.mail.from:Acme <onboarding@resend.dev>}")
     private String fromAddress;
+
+    @Value("${resend.api.key:}")
+    private String resendApiKey;
 
     @Async
     @Transactional
@@ -62,34 +64,66 @@ public class CampaignAsyncDispatcher {
         int sentCount = 0;
         int failedCount = 0;
 
-        for (EmailCampaignRecipient recipient : recipients) {
-            if ("VALID".equalsIgnoreCase(recipient.getStatus())) {
-                String personalizedBody = buildPersonalizedBody(templateToUse, recipient);
-                try {
-                    sendMimeEmail(recipient.getEmail(), emailSubject, personalizedBody);
-                    recipient.setSentAt(LocalDateTime.now());
-                    recipient.setDeliveredAt(LocalDateTime.now());
-                    recipient.setStatus("DELIVERED");
-                    recipient.setErrorMessage(null);
-                    recipient.setFailureReason(null);
-                    sentCount++;
-                } catch (Exception ex) {
-                    String errorReason = extractErrorMessage(ex);
-                    log.error("Failed to transmit email to recipient {}. Root cause: {}", recipient.getEmail(), errorReason, ex);
+        if (resendApiKey == null || resendApiKey.isBlank()) {
+            log.error("Resend API key is missing. Aborting campaign.");
+            failAllRecipients(recipients, "Resend API key is not configured");
+            failedCount = recipients.size();
+        } else {
+            Resend resend = new Resend(resendApiKey);
+            String senderAddr = (fromAddress != null && !fromAddress.isBlank()) ? fromAddress : "Acme <onboarding@resend.dev>";
+
+            List<CreateEmailOptions> batchOptions = new ArrayList<>();
+            List<EmailCampaignRecipient> validRecipients = new ArrayList<>();
+
+            for (EmailCampaignRecipient recipient : recipients) {
+                if ("VALID".equalsIgnoreCase(recipient.getStatus())) {
+                    String personalizedBody = buildPersonalizedBody(templateToUse, recipient);
+                    batchOptions.add(CreateEmailOptions.builder()
+                            .from(senderAddr)
+                            .to(recipient.getEmail())
+                            .subject(emailSubject)
+                            .html(personalizedBody)
+                            .build());
+                    validRecipients.add(recipient);
+                } else {
                     recipient.setStatus("FAILED");
                     recipient.setFailedAt(LocalDateTime.now());
-                    recipient.setErrorMessage(errorReason);
-                    recipient.setFailureReason(errorReason);
+                    if (recipient.getErrorMessage() == null || recipient.getErrorMessage().isBlank()) {
+                        recipient.setErrorMessage("Recipient marked as INVALID before dispatch");
+                        recipient.setFailureReason("Recipient marked as INVALID before dispatch");
+                    }
                     failedCount++;
                 }
-            } else {
-                recipient.setStatus("FAILED");
-                recipient.setFailedAt(LocalDateTime.now());
-                if (recipient.getErrorMessage() == null || recipient.getErrorMessage().isBlank()) {
-                    recipient.setErrorMessage("Recipient marked as INVALID before dispatch");
-                    recipient.setFailureReason("Recipient marked as INVALID before dispatch");
+            }
+
+            // Resend supports up to 100 emails per batch request
+            int batchSize = 100;
+            for (int i = 0; i < batchOptions.size(); i += batchSize) {
+                int end = Math.min(i + batchSize, batchOptions.size());
+                List<CreateEmailOptions> chunk = batchOptions.subList(i, end);
+                List<EmailCampaignRecipient> chunkRecipients = validRecipients.subList(i, end);
+
+                try {
+                    resend.batch().send(chunk);
+                    for (EmailCampaignRecipient recipient : chunkRecipients) {
+                        recipient.setSentAt(LocalDateTime.now());
+                        recipient.setDeliveredAt(LocalDateTime.now());
+                        recipient.setStatus("DELIVERED");
+                        recipient.setErrorMessage(null);
+                        recipient.setFailureReason(null);
+                        sentCount++;
+                    }
+                } catch (Exception ex) {
+                    String errorReason = extractErrorMessage(ex);
+                    log.error("Failed to transmit email batch. Root cause: {}", errorReason);
+                    for (EmailCampaignRecipient recipient : chunkRecipients) {
+                        recipient.setStatus("FAILED");
+                        recipient.setFailedAt(LocalDateTime.now());
+                        recipient.setErrorMessage(errorReason);
+                        recipient.setFailureReason(errorReason);
+                        failedCount++;
+                    }
                 }
-                failedCount++;
             }
         }
 
@@ -101,6 +135,17 @@ public class CampaignAsyncDispatcher {
 
         campaignRepository.save(campaign);
         log.info("Completed async campaign dispatch for campaign ID: {}. Sent: {}, Failed: {}", campaignId, sentCount, failedCount);
+    }
+
+    private void failAllRecipients(List<EmailCampaignRecipient> recipients, String reason) {
+        for (EmailCampaignRecipient recipient : recipients) {
+            if ("VALID".equalsIgnoreCase(recipient.getStatus())) {
+                recipient.setStatus("FAILED");
+                recipient.setFailedAt(LocalDateTime.now());
+                recipient.setErrorMessage(reason);
+                recipient.setFailureReason(reason);
+            }
+        }
     }
 
     @Scheduled(fixedRate = 15000)
@@ -122,15 +167,23 @@ public class CampaignAsyncDispatcher {
         if (toEmail == null || toEmail.isBlank() || !toEmail.contains("@")) {
             throw new IllegalArgumentException("Recipient email is empty or invalid: " + toEmail);
         }
-        MimeMessage message = mailSender.createMimeMessage();
-        MimeMessageHelper helper = new MimeMessageHelper(message, true, "UTF-8");
-        String senderAddr = (fromAddress != null && !fromAddress.isBlank()) ? fromAddress : "noreply@eventregistration.com";
-        helper.setFrom(senderAddr);
-        helper.setTo(toEmail);
-        helper.setSubject(subject != null && !subject.isBlank() ? subject : "Campaign Notification");
-        helper.setText(bodyHtml != null ? bodyHtml : "", true);
-        mailSender.send(message);
-        log.info("Campaign email successfully sent to {}", toEmail);
+        
+        if (resendApiKey == null || resendApiKey.isBlank()) {
+            throw new IllegalStateException("Resend API key is not configured. Please set resend.api.key in your properties.");
+        }
+
+        String senderAddr = (fromAddress != null && !fromAddress.isBlank()) ? fromAddress : "Acme <onboarding@resend.dev>";
+        
+        Resend resend = new Resend(resendApiKey);
+        CreateEmailOptions params = CreateEmailOptions.builder()
+                .from(senderAddr)
+                .to(toEmail)
+                .subject(subject != null && !subject.isBlank() ? subject : "Campaign Notification")
+                .html(bodyHtml != null ? bodyHtml : "")
+                .build();
+
+        resend.emails().send(params);
+        log.info("Campaign email successfully sent to {} via Resend", toEmail);
     }
 
     public boolean dispatchSingleEmail(String toEmail, String subject, String bodyHtml) {

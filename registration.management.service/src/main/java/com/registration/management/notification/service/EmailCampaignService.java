@@ -15,6 +15,10 @@ public interface EmailCampaignService {
 
     void cancelCampaign(Long id, User currentUser);
 
+    void deleteCampaign(Long id, User currentUser);
+
+    CampaignResponseDTO retryCampaign(Long id, User currentUser);
+
     void sendTestEmail(Long campaignId, User currentUser);
 
     void sendDirectTestEmail(String email, User currentUser);

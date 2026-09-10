@@ -1,13 +1,11 @@
 package com.registration.management.auth.service;
 
-import jakarta.mail.MessagingException;
-import jakarta.mail.internet.MimeMessage;
-import org.springframework.beans.factory.annotation.Autowired;
+import com.resend.Resend;
+import com.resend.services.emails.model.CreateEmailOptions;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.mail.javamail.JavaMailSender;
-import org.springframework.mail.javamail.MimeMessageHelper;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
+import com.resend.core.exception.ResendException;
 
 import java.util.logging.Logger;
 
@@ -16,11 +14,11 @@ public class EmailServiceImpl implements EmailService {
 
     private static final Logger log = Logger.getLogger(EmailServiceImpl.class.getName());
 
-    @Autowired
-    private JavaMailSender mailSender;
-
-    @Value("${app.mail.from}")
+    @Value("${app.mail.from:Acme <onboarding@resend.dev>}")
     private String fromAddress;
+
+    @Value("${resend.api.key:}")
+    private String resendApiKey;
 
     // ─── Password Reset ───────────────────────────────────────────────────────
 
@@ -32,18 +30,9 @@ public class EmailServiceImpl implements EmailService {
     @Override
     public void sendPasswordResetEmail(String toEmail, String resetLink) {
         try {
-            MimeMessage message = mailSender.createMimeMessage();
-            MimeMessageHelper helper = new MimeMessageHelper(message, true, "UTF-8");
-
-            helper.setFrom(fromAddress);
-            helper.setTo(toEmail);
-            helper.setSubject("Reset your password");
-            helper.setText(buildResetEmailBody(resetLink), /* isHtml = */ true);
-
-            mailSender.send(message);
+            sendWithResend(toEmail, "Reset your password", buildResetEmailBody(resetLink));
             log.info("[EmailService] Password reset email sent to: " + toEmail);
-
-        } catch (MessagingException e) {
+        } catch (Exception e) {
             log.severe("[EmailService] Failed to send password reset email to " + toEmail + ": " + e.getMessage());
             throw new RuntimeException("Failed to send password reset email", e);
         }
@@ -147,18 +136,9 @@ public class EmailServiceImpl implements EmailService {
     @Override
     public void sendStaffWelcomeEmail(String toEmail, String fullName, String setPasswordLink) {
         try {
-            MimeMessage message = mailSender.createMimeMessage();
-            MimeMessageHelper helper = new MimeMessageHelper(message, true, "UTF-8");
-
-            helper.setFrom(fromAddress);
-            helper.setTo(toEmail);
-            helper.setSubject("Welcome — Set your password to get started");
-            helper.setText(buildWelcomeEmailBody(fullName, setPasswordLink), /* isHtml = */ true);
-
-            mailSender.send(message);
+            sendWithResend(toEmail, "Welcome — Set your password to get started", buildWelcomeEmailBody(fullName, setPasswordLink));
             log.info("[EmailService] Staff welcome email sent to: " + toEmail);
-
-        } catch (MessagingException e) {
+        } catch (Exception e) {
             log.severe("[EmailService] Failed to send staff welcome email to " + toEmail + ": " + e.getMessage());
             // Do not propagate — staff record is already saved; teacher can use Forgot Password later
         }
@@ -259,18 +239,32 @@ public class EmailServiceImpl implements EmailService {
             return;
         }
         try {
-            MimeMessage message = mailSender.createMimeMessage();
-            MimeMessageHelper helper = new MimeMessageHelper(message, true, "UTF-8");
-
-            helper.setFrom(fromAddress);
-            helper.setTo(toEmail);
-            helper.setSubject("Registration Approved — Check-in QR Code for " + eventName);
-            helper.setText(buildApprovalQrEmailBody(personName, personType, schoolName, eventName, qrCodeDataUri), true);
-
-            mailSender.send(message);
+            sendWithResend(toEmail, "Registration Approved — Check-in QR Code for " + eventName, buildApprovalQrEmailBody(personName, personType, schoolName, eventName, qrCodeDataUri));
             log.info("[EmailService] Approval QR email sent to: " + toEmail + " for event: " + eventName);
         } catch (Exception e) {
             log.severe("[EmailService] Failed to send approval QR email to " + toEmail + ": " + e.getMessage());
+        }
+    }
+
+    private void sendWithResend(String to, String subject, String html) {
+        if (resendApiKey == null || resendApiKey.isBlank()) {
+            throw new IllegalStateException("Resend API key is not configured");
+        }
+        
+        Resend resend = new Resend(resendApiKey);
+
+        CreateEmailOptions params = CreateEmailOptions.builder()
+                .from((fromAddress != null && !fromAddress.isBlank()) ? fromAddress : "Acme <onboarding@resend.dev>")
+                .to(to)
+                .subject(subject)
+                .html(html)
+                .build();
+
+        try {
+            resend.emails().send(params);
+        } catch (ResendException e) {
+            log.severe("[EmailService] Resend API Error: " + e.getMessage());
+            throw new RuntimeException("Resend API Error: " + e.getMessage(), e);
         }
     }
 

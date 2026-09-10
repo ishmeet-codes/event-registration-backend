@@ -93,6 +93,51 @@ public class EmailCampaignServiceImpl implements EmailCampaignService {
     }
 
     @Override
+    @Transactional
+    public void deleteCampaign(Long id, User currentUser) {
+        EmailCampaign campaign = campaignRepository.findById(id)
+                .orElseThrow(() -> new RuntimeException("Campaign not found with id " + id));
+        campaignRepository.delete(campaign);
+    }
+
+    @Override
+    @Transactional
+    public CampaignResponseDTO retryCampaign(Long id, User currentUser) {
+        EmailCampaign campaign = campaignRepository.findById(id)
+                .orElseThrow(() -> new RuntimeException("Campaign not found with id " + id));
+
+        if (campaign.getRecipients() != null) {
+            for (EmailCampaignRecipient recipient : campaign.getRecipients()) {
+                if ("FAILED".equalsIgnoreCase(recipient.getStatus()) || "INVALID".equalsIgnoreCase(recipient.getStatus())) {
+                    recipient.setStatus("VALID");
+                    recipient.setErrorMessage(null);
+                    recipient.setFailureReason(null);
+                    recipient.setFailedAt(null);
+                }
+            }
+        }
+
+        int validCount = (campaign.getRecipients() != null)
+                ? (int) campaign.getRecipients().stream().filter(r -> "VALID".equalsIgnoreCase(r.getStatus())).count()
+                : 0;
+
+        campaign.setValidRecipientsCount(validCount);
+        campaign.setSentCount(0);
+        campaign.setFailedCount(0);
+        campaign.setDeliveredCount(0);
+        campaign.setBouncedCount(0);
+        campaign.setCompletedAt(null);
+        campaign.setStartedAt(LocalDateTime.now());
+        campaign.setStatus(CampaignStatus.PROCESSING);
+
+        EmailCampaign saved = campaignRepository.save(campaign);
+
+        campaignAsyncDispatcher.dispatchCampaignAsync(saved.getId(), saved.getName(), saved.getDescription());
+
+        return mapToDTO(saved);
+    }
+
+    @Override
     public void sendTestEmail(Long campaignId, User currentUser) {
         if (currentUser != null && currentUser.getEmail() != null) {
             sendDirectTestEmail(currentUser.getEmail(), currentUser);

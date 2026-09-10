@@ -50,12 +50,22 @@ public class EmailCampaignController {
 
     @DeleteMapping("/{id}")
     @PreAuthorize("hasAuthority('EMAIL_CAMPAIGN_CANCEL') or hasRole('SUPER_ADMIN') or hasRole('ADMIN')")
-    public ResponseEntity<Void> cancelCampaign(
+    public ResponseEntity<Void> deleteCampaign(
             @PathVariable("id") Long id,
             @AuthenticationPrincipal User currentUser
     ) {
-        campaignService.cancelCampaign(id, currentUser);
+        campaignService.deleteCampaign(id, currentUser);
         return ResponseEntity.noContent().build();
+    }
+
+    @PostMapping("/{id}/retry")
+    @PreAuthorize("hasAuthority('EMAIL_CAMPAIGN_CREATE') or hasRole('SUPER_ADMIN') or hasRole('ADMIN')")
+    public ResponseEntity<CampaignResponseDTO> retryCampaign(
+            @PathVariable("id") Long id,
+            @AuthenticationPrincipal User currentUser
+    ) {
+        CampaignResponseDTO response = campaignService.retryCampaign(id, currentUser);
+        return ResponseEntity.ok(response);
     }
 
     @PostMapping("/audience/preview")
