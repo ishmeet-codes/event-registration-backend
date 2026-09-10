@@ -16,4 +16,6 @@ public interface EmailCampaignRecipientRepository extends JpaRepository<EmailCam
     Page<EmailCampaignRecipient> findByCampaignIdAndStatus(Long campaignId, String status, Pageable pageable);
 
     long countByCampaignIdAndStatus(Long campaignId, String status);
+
+    java.util.Optional<EmailCampaignRecipient> findFirstByCampaignIdAndErrorMessageIsNotNull(Long campaignId);
 }

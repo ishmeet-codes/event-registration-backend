@@ -151,7 +151,7 @@ public class AuditManagementServiceImpl implements AuditManagementService {
 
         Map<String, Long> moduleBreakdown = logs.stream()
                 .filter(l -> l.getModule() != null)
-                .collect(Collectors.groupingBy(AuditLog::getModule, Collectors.counting()));
+                .collect(Collectors.groupingBy(l -> l.getModule(), Collectors.counting()));
 
         Map<String, Long> actionBreakdown = logs.stream()
                 .filter(l -> l.getAction() != null)

@@ -79,7 +79,7 @@ public class SecurityConfig {
 
         // Parse comma-separated origins from property/env-var
         List<String> origins = Arrays.stream(corsAllowedOrigins.split(","))
-                .map(String::trim)
+                .map(s -> s.trim())
                 .filter(s -> !s.isEmpty())
                 .toList();
         configuration.setAllowedOrigins(origins);

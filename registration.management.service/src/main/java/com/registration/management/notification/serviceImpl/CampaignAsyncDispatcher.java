@@ -65,17 +65,30 @@ public class CampaignAsyncDispatcher {
         for (EmailCampaignRecipient recipient : recipients) {
             if ("VALID".equalsIgnoreCase(recipient.getStatus())) {
                 String personalizedBody = buildPersonalizedBody(templateToUse, recipient);
-                boolean success = dispatchSingleEmail(recipient.getEmail(), emailSubject, personalizedBody);
-                if (success) {
+                try {
+                    sendMimeEmail(recipient.getEmail(), emailSubject, personalizedBody);
                     recipient.setSentAt(LocalDateTime.now());
                     recipient.setDeliveredAt(LocalDateTime.now());
+                    recipient.setStatus("DELIVERED");
+                    recipient.setErrorMessage(null);
+                    recipient.setFailureReason(null);
                     sentCount++;
-                } else {
+                } catch (Exception ex) {
+                    String errorReason = extractErrorMessage(ex);
+                    log.error("Failed to transmit email to recipient {}. Root cause: {}", recipient.getEmail(), errorReason, ex);
                     recipient.setStatus("FAILED");
-                    recipient.setErrorMessage("SMTP transport failed or mail relay unreachable");
+                    recipient.setFailedAt(LocalDateTime.now());
+                    recipient.setErrorMessage(errorReason);
+                    recipient.setFailureReason(errorReason);
                     failedCount++;
                 }
             } else {
+                recipient.setStatus("FAILED");
+                recipient.setFailedAt(LocalDateTime.now());
+                if (recipient.getErrorMessage() == null || recipient.getErrorMessage().isBlank()) {
+                    recipient.setErrorMessage("Recipient marked as INVALID before dispatch");
+                    recipient.setFailureReason("Recipient marked as INVALID before dispatch");
+                }
                 failedCount++;
             }
         }
@@ -105,25 +118,46 @@ public class CampaignAsyncDispatcher {
         }
     }
 
-    public boolean dispatchSingleEmail(String toEmail, String subject, String bodyHtml) {
+    public void sendMimeEmail(String toEmail, String subject, String bodyHtml) throws Exception {
         if (toEmail == null || toEmail.isBlank() || !toEmail.contains("@")) {
-            return false;
+            throw new IllegalArgumentException("Recipient email is empty or invalid: " + toEmail);
         }
+        MimeMessage message = mailSender.createMimeMessage();
+        MimeMessageHelper helper = new MimeMessageHelper(message, true, "UTF-8");
+        String senderAddr = (fromAddress != null && !fromAddress.isBlank()) ? fromAddress : "noreply@eventregistration.com";
+        helper.setFrom(senderAddr);
+        helper.setTo(toEmail);
+        helper.setSubject(subject != null && !subject.isBlank() ? subject : "Campaign Notification");
+        helper.setText(bodyHtml != null ? bodyHtml : "", true);
+        mailSender.send(message);
+        log.info("Campaign email successfully sent to {}", toEmail);
+    }
+
+    public boolean dispatchSingleEmail(String toEmail, String subject, String bodyHtml) {
         try {
-            MimeMessage message = mailSender.createMimeMessage();
-            MimeMessageHelper helper = new MimeMessageHelper(message, true, "UTF-8");
-            String senderAddr = (fromAddress != null && !fromAddress.isBlank()) ? fromAddress : "noreply@eventregistration.com";
-            helper.setFrom(senderAddr);
-            helper.setTo(toEmail);
-            helper.setSubject(subject != null && !subject.isBlank() ? subject : "Campaign Notification");
-            helper.setText(bodyHtml != null ? bodyHtml : "", true);
-            mailSender.send(message);
-            log.info("Campaign email successfully sent to {}", toEmail);
+            sendMimeEmail(toEmail, subject, bodyHtml);
             return true;
         } catch (Exception ex) {
-            log.error("Failed to transmit email to {}: {}", toEmail, ex.getMessage());
+            log.error("Failed to transmit single email to {}. Root cause: {}", toEmail, extractErrorMessage(ex), ex);
             return false;
         }
+    }
+
+    public String extractErrorMessage(Throwable ex) {
+        if (ex == null) return "Unknown mail error";
+        Throwable root = ex;
+        while (root.getCause() != null && root.getCause() != root) {
+            root = root.getCause();
+        }
+        String rootType = root.getClass().getSimpleName();
+        String rootMsg = root.getMessage();
+        if (rootMsg == null || rootMsg.isBlank()) {
+            rootMsg = ex.getMessage();
+        }
+        if (rootMsg == null || rootMsg.isBlank()) {
+            return rootType;
+        }
+        return rootType + ": " + rootMsg;
     }
 
     public String buildPersonalizedBody(String template, EmailCampaignRecipient recipient) {

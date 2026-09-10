@@ -7,6 +7,7 @@ import com.registration.management.notification.entity.EmailCampaign;
 import com.registration.management.notification.entity.EmailCampaignRecipient;
 import com.registration.management.notification.enums.CampaignStatus;
 import com.registration.management.notification.enums.RecipientType;
+import com.registration.management.notification.repository.EmailCampaignRecipientRepository;
 import com.registration.management.notification.repository.EmailCampaignRepository;
 import com.registration.management.notification.service.AudienceBuilderService;
 import com.registration.management.notification.service.EmailCampaignService;
@@ -27,6 +28,7 @@ import java.util.List;
 public class EmailCampaignServiceImpl implements EmailCampaignService {
 
     private final EmailCampaignRepository campaignRepository;
+    private final EmailCampaignRecipientRepository recipientRepository;
     private final AudienceBuilderService audienceBuilderService;
     private final CampaignAsyncDispatcher campaignAsyncDispatcher;
 
@@ -99,8 +101,8 @@ public class EmailCampaignServiceImpl implements EmailCampaignService {
 
     @Override
     public void sendDirectTestEmail(String email, User currentUser) {
-        if (email == null || email.isBlank()) {
-            return;
+        if (email == null || email.isBlank() || !email.contains("@")) {
+            throw new IllegalArgumentException("Recipient email address is invalid: " + email);
         }
         String subject = "[TEST DISPATCH] Email Campaign Verification Sample";
         String body = """
@@ -117,10 +119,30 @@ public class EmailCampaignServiceImpl implements EmailCampaignService {
                 </body>
                 </html>
                 """;
-        campaignAsyncDispatcher.dispatchSingleEmail(email, subject, body);
+        try {
+            campaignAsyncDispatcher.sendMimeEmail(email, subject, body);
+        } catch (Exception ex) {
+            String cleanError = campaignAsyncDispatcher.extractErrorMessage(ex);
+            log.error("Direct test email failed to recipient {}. Root cause: {}", email, cleanError, ex);
+            throw new RuntimeException(cleanError, ex);
+        }
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<EmailCampaignRecipient> getCampaignRecipients(Long campaignId) {
+        return recipientRepository.findByCampaignId(campaignId);
     }
 
     private CampaignResponseDTO mapToDTO(EmailCampaign c) {
+        String lastError = null;
+        if (c.getFailedCount() != null && c.getFailedCount() > 0) {
+            java.util.Optional<EmailCampaignRecipient> failed = recipientRepository.findFirstByCampaignIdAndErrorMessageIsNotNull(c.getId());
+            if (failed.isPresent()) {
+                lastError = failed.get().getErrorMessage();
+            }
+        }
+
         return CampaignResponseDTO.builder()
                 .id(c.getId())
                 .name(c.getName())
@@ -141,6 +163,7 @@ public class EmailCampaignServiceImpl implements EmailCampaignService {
                 .createdBy(c.getCreatedBy() != null ? c.getCreatedBy().getUsername() : "System Admin")
                 .createdAt(c.getCreatedAt())
                 .updatedAt(c.getUpdatedAt())
+                .lastErrorMessage(lastError)
                 .build();
     }
 }

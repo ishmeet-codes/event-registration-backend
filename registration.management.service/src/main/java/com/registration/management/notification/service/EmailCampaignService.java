@@ -18,5 +18,7 @@ public interface EmailCampaignService {
     void sendTestEmail(Long campaignId, User currentUser);
 
     void sendDirectTestEmail(String email, User currentUser);
+
+    java.util.List<com.registration.management.notification.entity.EmailCampaignRecipient> getCampaignRecipients(Long campaignId);
 }
 

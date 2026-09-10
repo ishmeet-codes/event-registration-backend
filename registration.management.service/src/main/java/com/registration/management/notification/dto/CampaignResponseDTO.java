@@ -34,4 +34,5 @@ public class CampaignResponseDTO {
     private String createdBy;
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;
+    private String lastErrorMessage;
 }

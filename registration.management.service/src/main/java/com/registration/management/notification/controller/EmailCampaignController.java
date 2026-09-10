@@ -80,12 +80,37 @@ public class EmailCampaignController {
 
     @PostMapping("/test-email")
     @PreAuthorize("hasAuthority('EMAIL_CAMPAIGN_CREATE') or hasRole('SUPER_ADMIN') or hasRole('ADMIN')")
-    public ResponseEntity<Void> sendDirectTestEmail(
+    public ResponseEntity<?> sendDirectTestEmail(
             @RequestParam String email,
             @AuthenticationPrincipal User currentUser
     ) {
-        campaignService.sendDirectTestEmail(email, currentUser);
-        return ResponseEntity.ok().build();
+        try {
+            campaignService.sendDirectTestEmail(email, currentUser);
+            return ResponseEntity.ok(java.util.Map.of(
+                    "status", "SUCCESS",
+                    "message", "Test email successfully delivered to " + email
+            ));
+        } catch (IllegalArgumentException ex) {
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(java.util.Map.of(
+                    "status", "ERROR",
+                    "error", "Invalid Request",
+                    "message", ex.getMessage()
+            ));
+        } catch (Exception ex) {
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(java.util.Map.of(
+                    "status", "ERROR",
+                    "error", "SMTP Delivery Failed",
+                    "message", ex.getMessage() != null ? ex.getMessage() : "Unknown mail server error"
+            ));
+        }
+    }
+
+    @GetMapping("/{id}/recipients")
+    @PreAuthorize("hasAuthority('EMAIL_CAMPAIGN_VIEW') or hasRole('SUPER_ADMIN') or hasRole('ADMIN')")
+    public ResponseEntity<java.util.List<com.registration.management.notification.entity.EmailCampaignRecipient>> getCampaignRecipients(
+            @PathVariable("id") Long id
+    ) {
+        return ResponseEntity.ok(campaignService.getCampaignRecipients(id));
     }
 }
 
