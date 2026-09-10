@@ -46,14 +46,21 @@ public class AuthController {
     }
 
     @PostMapping("/refresh")
-    public ResponseEntity<AuthResponse> refresh(@CookieValue(name = "${app.cookie.refresh-token-name:refreshToken}", required = true) String refreshToken) {
+    public ResponseEntity<AuthResponse> refresh(
+            @CookieValue(name = "${app.cookie.refresh-token-name:refreshToken}", required = false) String refreshToken) {
+        // If no cookie is present (e.g. first cross-origin request before cookie propagates),
+        // return 401 so the frontend interceptor redirects to /login cleanly.
+        if (refreshToken == null || refreshToken.isBlank()) {
+            return ResponseEntity.status(401).build();
+        }
+
         TokenRefreshRequest request = new TokenRefreshRequest();
         request.setRefreshToken(refreshToken);
         AuthResponse response = authService.refresh(request);
-        
+
         ResponseCookie cookie = cookiesService.generateRefreshTokenCookie(response.getRefreshToken());
         response.setRefreshToken(null);
-        
+
         return ResponseEntity.ok()
                 .header(HttpHeaders.SET_COOKIE, cookie.toString())
                 .body(response);
