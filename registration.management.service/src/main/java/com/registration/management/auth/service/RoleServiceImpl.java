@@ -94,16 +94,27 @@ public class RoleServiceImpl implements RoleService {
     @Override
     public RoleResponse assignPermissions(Long roleId, AssignPermissionsRequest request) {
         Role role = findRoleOrThrow(roleId);
-        // Full replace
-        role.getRolePermissions().clear();
+        
+        java.util.Set<Long> requestedPermIds = new java.util.HashSet<>(request.getPermissionIds());
 
+        // Remove permissions that were deselected
+        role.getRolePermissions().removeIf(rp -> !requestedPermIds.contains(rp.getPermission().getId()));
+
+        // Find existing permission IDs
+        java.util.Set<Long> existingPermIds = role.getRolePermissions().stream()
+                .map(rp -> rp.getPermission().getId())
+                .collect(Collectors.toSet());
+
+        // Add newly selected permissions
         for (Long permId : request.getPermissionIds()) {
-            Permission permission = permissionRepository.findById(permId)
-                    .orElseThrow(() -> new EntityNotFoundException("Permission not found: " + permId));
-            role.getRolePermissions().add(RolePermission.builder()
-                    .role(role)
-                    .permission(permission)
-                    .build());
+            if (!existingPermIds.contains(permId)) {
+                Permission permission = permissionRepository.findById(permId)
+                        .orElseThrow(() -> new EntityNotFoundException("Permission not found: " + permId));
+                role.getRolePermissions().add(RolePermission.builder()
+                        .role(role)
+                        .permission(permission)
+                        .build());
+            }
         }
 
         return toResponse(roleRepository.save(role));
