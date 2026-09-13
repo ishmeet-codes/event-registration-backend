@@ -147,5 +147,13 @@ databaseChangeLog:
       file: schema/V037_seed_campaign_permissions.sql
       relativeToChangelogFile: true
 
+  - include:
+      file: schema/V038_create_refreshment_tables.sql
+      relativeToChangelogFile: true
+
+  - include:
+      file: schema/V039_seed_refreshment_permissions.sql
+      relativeToChangelogFile: true
+
 
 
